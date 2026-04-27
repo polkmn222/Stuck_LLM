@@ -1,0 +1,26 @@
+[project]
+name = "stock-analysis-agent-backend"
+version = "0.1.0"
+description = "Backend API for the conversational stock-analysis agent."
+requires-python = ">=3.9"
+dependencies = [
+  "cryptography>=42.0.0",
+  "fastapi>=0.128.0",
+  "uvicorn[standard]>=0.38.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28.0",
+  "mypy>=1.0.0",
+  "pytest>=8.0.0",
+  "ruff>=0.14.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
