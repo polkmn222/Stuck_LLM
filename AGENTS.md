@@ -17,10 +17,12 @@
 |------|---------|
 | Find placeholders | `rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs` |
 | Markdown size check | `wc -l AGENTS.md docs/*.md docs/agent-workflows/*.md` |
+| Harness quick validation | `./run-harness.sh --profile quick` |
 | Backend test | `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` |
 | Frontend unit test | `cd src/frontend && npm test` |
 | Frontend typecheck | `cd src/frontend && npm run typecheck` |
 | Frontend build | `cd src/frontend && npm run build` |
+| Design system lint | `npx @google/design.md lint DESIGN.md` |
 
 ## Key Conventions
 - Use phase IDs as `phase_001`, `phase_002`, and so on.
@@ -30,9 +32,11 @@
 - Do not mix post-`as_of_at` evidence into historical LLM analysis.
 - Non-destructive installs, setup, and validation commands may run without extra user confirmation.
 - If code or policy changes require docs updates, ask first unless the current user request already includes those doc updates.
+- If `docs/agent-workflows` no longer drives the requested behavior, proactively patch those workflow docs in the same phase.
 - Keep new implementation slices atomic under `src/backend/app/features/<feature>` and `src/frontend/src/features/<feature>`.
 - Every backend or frontend feature/behavior change must include unit tests in the same phase.
 - New feature folders must be obvious to humans and agents; avoid cross-feature files unless the code is genuinely shared.
+- For frontend or UI work, read `DESIGN.md` first and keep visual changes aligned with its tokens and rationale.
 
 ## Skill Routing
 - See `docs/agent-workflows/orchestration.md` for which skills to use by situation.

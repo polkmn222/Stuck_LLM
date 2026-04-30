@@ -6,7 +6,11 @@ import { ChatShell } from "./features/chat/ChatShell";
 import { SettingsModal } from "./features/settings/SettingsModal";
 import { SettingsPanel } from "./features/settings/SettingsPanel";
 import {
+  clearConversations,
+  deleteConversation,
   deleteLlmCredential,
+  fetchConversation,
+  fetchConversations,
   fetchLlmCredentialStatus,
   fetchMarketQuote,
   fetchSettings,
@@ -14,10 +18,12 @@ import {
   saveLlmCredential,
   saveSettings,
   sendConversationMessage,
+  testLlmCredential,
 } from "./shared/api";
 import { uiCopy } from "./shared/i18n";
 import type {
   AppSettings,
+  ConversationSummary,
   ConversationSnapshot,
   LlmCredentialStatus,
   SaveLlmCredentialRequest,
@@ -90,6 +96,9 @@ function seededSnapshot(quote: ConversationSnapshot["marketSnapshot"]): Conversa
 export function App() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [snapshot, setSnapshot] = useState<ConversationSnapshot | null>(null);
+  const [activeConversation, setActiveConversation] = useState<ConversationSnapshot | null>(null);
+  const [chatSessionKey, setChatSessionKey] = useState(0);
+  const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([]);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [hasSettingsError, setHasSettingsError] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>("chat");
@@ -107,10 +116,12 @@ export function App() {
       const credentialStatusPromise = fetchLlmCredentialStatus().catch(
         () => DEFAULT_CREDENTIAL_STATUS,
       );
+      const conversationsPromise = fetchConversations().catch(() => []);
       try {
         const loadedSettings = await fetchSettings();
-        const [loadedCredentialStatus, quote] = await Promise.all([
+        const [loadedCredentialStatus, loadedConversations, quote] = await Promise.all([
           credentialStatusPromise,
+          conversationsPromise,
           fetchMarketQuote(
             loadedSettings.defaultMarket,
             DEFAULT_SYMBOL_BY_MARKET[loadedSettings.defaultMarket],
@@ -119,12 +130,17 @@ export function App() {
         if (isCurrent) {
           setSettings(loadedSettings);
           setCredentialStatus(loadedCredentialStatus);
+          setConversationSummaries(loadedConversations);
           setSnapshot(seededSnapshot(quote));
         }
       } catch {
         if (isCurrent) {
-          const loadedCredentialStatus = await credentialStatusPromise;
+          const [loadedCredentialStatus, loadedConversations] = await Promise.all([
+            credentialStatusPromise,
+            conversationsPromise,
+          ]);
           setCredentialStatus(loadedCredentialStatus);
+          setConversationSummaries(loadedConversations);
           setSettings(DEFAULT_SETTINGS);
         }
       }
@@ -163,6 +179,70 @@ export function App() {
     const nextStatus = await deleteLlmCredential();
     setCredentialStatus(nextStatus);
     return nextStatus;
+  }
+
+  function mergeConversationSummary(nextSnapshot: ConversationSnapshot) {
+    const latestMessage = nextSnapshot.messages[nextSnapshot.messages.length - 1];
+    const firstUser = nextSnapshot.messages.find((message) => message.role === "user");
+    if (!latestMessage) {
+      return;
+    }
+
+    const nextSummary: ConversationSummary = {
+      conversationId: nextSnapshot.conversationId,
+      title: firstUser?.content.slice(0, 64) || nextSnapshot.conversationId,
+      status: nextSnapshot.status,
+      updatedAt: latestMessage.createdAt,
+      lastMessage: latestMessage.content,
+    };
+    setConversationSummaries((current) => [
+      nextSummary,
+      ...current.filter((summary) => summary.conversationId !== nextSnapshot.conversationId),
+    ]);
+  }
+
+  async function handleSendConversationMessage(
+    request: Parameters<typeof sendConversationMessage>[0],
+  ) {
+    const nextSnapshot = await sendConversationMessage(request);
+    setActiveConversation(nextSnapshot);
+    setSnapshot(nextSnapshot);
+    mergeConversationSummary(nextSnapshot);
+    return nextSnapshot;
+  }
+
+  async function handleSelectConversation(conversationId: string) {
+    const loadedConversation = await fetchConversation(conversationId);
+    setActiveConversation(loadedConversation);
+    setSnapshot(loadedConversation);
+    setActiveView("chat");
+  }
+
+  function handleNewConversation() {
+    setActiveConversation(null);
+    setSnapshot(null);
+    setChatSessionKey((current) => current + 1);
+    setActiveView("chat");
+  }
+
+  async function handleDeleteConversation(conversationId: string) {
+    await deleteConversation(conversationId);
+    setConversationSummaries((current) =>
+      current.filter((summary) => summary.conversationId !== conversationId),
+    );
+    if (activeConversation?.conversationId === conversationId) {
+      setActiveConversation(null);
+      setSnapshot(null);
+    }
+  }
+
+  async function handleClearConversations() {
+    const deletedCount = await clearConversations();
+    setConversationSummaries([]);
+    setActiveConversation(null);
+    setSnapshot(null);
+    setActiveView("chat");
+    return deletedCount;
   }
 
   const navItems: Array<{ view: ActiveView; label: string; icon: string }> = [
@@ -205,9 +285,14 @@ export function App() {
 
     return (
       <ChatShell
+        key={`${chatSessionKey}:${activeConversation?.conversationId ?? "new"}`}
+        conversationSnapshot={activeConversation}
         copy={copy.chat}
         onAnalysisChange={setSnapshot}
-        onSendMessage={sendConversationMessage}
+        onConversationChange={setActiveConversation}
+        onFetchMarketQuote={fetchMarketQuote}
+        onSendMessage={handleSendConversationMessage}
+        responseLanguage={uiPreferences.language}
         settings={settings}
       />
     );
@@ -245,6 +330,47 @@ export function App() {
           ))}
         </nav>
 
+        <section className="conversation-rail" aria-label={copy.app.previousChats}>
+          <div className="conversation-rail-heading">
+            <span>{copy.app.previousChats}</span>
+            <button onClick={handleNewConversation} type="button">
+              {copy.app.newChat}
+            </button>
+          </div>
+          <div className="conversation-list">
+            {conversationSummaries.length ? (
+              conversationSummaries.map((summary) => (
+                <div className="conversation-list-item" key={summary.conversationId}>
+                  <button
+                    aria-label={summary.title}
+                    aria-pressed={activeConversation?.conversationId === summary.conversationId}
+                    className={
+                      activeConversation?.conversationId === summary.conversationId
+                        ? "conversation-button is-active"
+                        : "conversation-button"
+                    }
+                    onClick={() => void handleSelectConversation(summary.conversationId)}
+                    type="button"
+                  >
+                    <strong>{summary.title}</strong>
+                    <span>{summary.lastMessage}</span>
+                  </button>
+                  <button
+                    aria-label={`${copy.app.deleteChat} ${summary.title}`}
+                    className="conversation-delete-button"
+                    onClick={() => void handleDeleteConversation(summary.conversationId)}
+                    type="button"
+                  >
+                    x
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p>{copy.app.noConversations}</p>
+            )}
+          </div>
+        </section>
+
         <footer className="sidebar-footer">
           <button className="rail-button" onClick={() => setIsSettingsOpen(true)} type="button">
             <span aria-hidden="true" className="rail-icon">
@@ -263,9 +389,11 @@ export function App() {
         <SettingsModal
           copy={copy.settingsModal}
           credentialStatus={credentialStatus}
+          onClearConversations={handleClearConversations}
           onClose={() => setIsSettingsOpen(false)}
           onDeleteCredential={handleDeleteCredential}
           onSaveCredential={handleSaveCredential}
+          onTestCredential={testLlmCredential}
           onUiPreferencesChange={updateUiPreferences}
           uiPreferences={uiPreferences}
         />

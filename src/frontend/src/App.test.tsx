@@ -1,9 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import {
+  clearConversations,
+  deleteConversation,
   deleteLlmCredential,
+  fetchConversation,
+  fetchConversations,
   fetchLlmCredentialStatus,
   fetchMarketQuote,
   fetchSettings,
@@ -11,10 +15,16 @@ import {
   saveLlmCredential,
   saveSettings,
   sendConversationMessage,
+  testLlmCredential,
 } from "./shared/api";
+import type { MarketQuote } from "./shared/types";
 
 vi.mock("./shared/api", () => ({
+  clearConversations: vi.fn(),
+  deleteConversation: vi.fn(),
   deleteLlmCredential: vi.fn(),
+  fetchConversation: vi.fn(),
+  fetchConversations: vi.fn(),
   fetchLlmCredentialStatus: vi.fn(),
   fetchMarketQuote: vi.fn(),
   fetchSettings: vi.fn(),
@@ -22,6 +32,7 @@ vi.mock("./shared/api", () => ({
   saveLlmCredential: vi.fn(),
   saveSettings: vi.fn(),
   sendConversationMessage: vi.fn(),
+  testLlmCredential: vi.fn(),
 }));
 
 const usSettings = {
@@ -31,16 +42,22 @@ const usSettings = {
   defaultHorizon: "swing",
 } as const;
 
-const appleQuote = {
+const appleQuote: MarketQuote = {
   market: "US",
   symbol: "AAPL",
   name: "Apple",
   exchange: "NASDAQ",
   currency: "USD",
   lastPrice: 207.15,
+  previousClose: null,
+  changePct: null,
   asOfAt: "2026-04-24T16:00:00-04:00",
   source: "seeded_local_fixture",
-} as const;
+  chartWindow: "1D",
+  chartBars: [],
+  keyStats: [],
+  newsItems: [],
+};
 
 const emptyCredentialStatus = {
   configured: false,
@@ -80,6 +97,10 @@ describe("App", () => {
   beforeEach(() => {
     installMemoryStorage();
     vi.mocked(fetchSettings).mockResolvedValue(usSettings);
+    vi.mocked(fetchConversations).mockResolvedValue([]);
+    vi.mocked(fetchConversation).mockReset();
+    vi.mocked(deleteConversation).mockResolvedValue(1);
+    vi.mocked(clearConversations).mockResolvedValue(0);
     vi.mocked(fetchLlmCredentialStatus).mockResolvedValue(emptyCredentialStatus);
     vi.mocked(fetchMarketQuote).mockResolvedValue(appleQuote);
     vi.mocked(saveLlmCredential).mockResolvedValue(emptyCredentialStatus);
@@ -87,6 +108,16 @@ describe("App", () => {
     vi.mocked(saveSettings).mockResolvedValue(usSettings);
     vi.mocked(sendConversationMessage).mockReset();
     vi.mocked(runBacktest).mockReset();
+    vi.mocked(testLlmCredential).mockResolvedValue({
+      configured: false,
+      status: "setup_needed",
+      provider: null,
+      model: null,
+      baseUrl: null,
+      keySource: null,
+      errorCode: null,
+      message: "Save an LLM provider key before testing the connection.",
+    });
   });
 
   it("loads the initial quote for the configured default market", async () => {
@@ -124,6 +155,52 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "전송" })).toBeInTheDocument();
   });
 
+  it("sends the active UI language with chat messages", async () => {
+    vi.mocked(sendConversationMessage).mockResolvedValueOnce({
+      conversationId: "conv_language",
+      status: "needs_input",
+      missingInputs: ["horizon"],
+      analysisRequest: null,
+      analysisResult: null,
+      marketSnapshot: null,
+      messages: [
+        {
+          id: "msg_user",
+          role: "user",
+          content: "Should I buy Samsung Electronics?",
+          meta: "KR market / quick mode",
+          createdAt: "2026-04-28T00:00:00Z",
+        },
+        {
+          id: "msg_assistant",
+          role: "assistant",
+          content: "어떤 투자 기간을 사용할까요?",
+          meta: "기간 필요",
+          createdAt: "2026-04-28T00:00:01Z",
+        },
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Stock Analysis Agent" });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "한국어" }));
+    fireEvent.change(screen.getByLabelText("메시지"), {
+      target: { value: "Should I buy Samsung Electronics?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
+
+    await waitFor(() => {
+      expect(sendConversationMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: "Should I buy Samsung Electronics?",
+          responseLanguage: "ko",
+        }),
+      );
+    });
+  });
+
   it("switches between dark and light themes", async () => {
     render(<App />);
 
@@ -156,6 +233,148 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "PnL curve" })).toBeInTheDocument();
   });
 
+  it("loads previous conversations from the left rail", async () => {
+    vi.mocked(fetchConversations).mockResolvedValueOnce([
+      {
+        conversationId: "conv_aapl",
+        title: "AAPL",
+        status: "market_snapshot",
+        updatedAt: "2026-04-28T20:00:00Z",
+        lastMessage: "Here is the market snapshot for Apple.",
+      },
+    ]);
+    vi.mocked(fetchConversation).mockResolvedValueOnce({
+      conversationId: "conv_aapl",
+      status: "market_snapshot",
+      missingInputs: [],
+      analysisRequest: null,
+      analysisResult: null,
+      marketSnapshot: null,
+      messages: [
+        {
+          id: "msg_assistant",
+          role: "assistant",
+          content: "Loaded AAPL snapshot.",
+          meta: "market snapshot",
+          createdAt: "2026-04-28T20:00:00Z",
+        },
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "AAPL" });
+    fireEvent.click(screen.getByRole("button", { name: "AAPL" }));
+
+    await screen.findByText("Loaded AAPL snapshot.");
+    expect(fetchConversation).toHaveBeenCalledWith("conv_aapl");
+  });
+
+  it("opens a fresh empty chat when New chat is clicked", async () => {
+    vi.mocked(sendConversationMessage).mockResolvedValueOnce({
+      conversationId: "conv_sent",
+      status: "market_snapshot",
+      missingInputs: [],
+      analysisRequest: null,
+      analysisResult: null,
+      marketSnapshot: null,
+      messages: [
+        {
+          id: "msg_user_sent",
+          role: "user",
+          content: "AAPL",
+          meta: "US market / quick mode",
+          createdAt: "2026-04-29T00:00:00Z",
+        },
+        {
+          id: "msg_assistant_sent",
+          role: "assistant",
+          content: "Loaded AAPL snapshot.",
+          meta: "market snapshot",
+          createdAt: "2026-04-29T00:00:01Z",
+        },
+      ],
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Stock Analysis Agent" });
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "AAPL" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText("Conversation")).getByText("Loaded AAPL snapshot."),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText("Conversation")).queryByText("Loaded AAPL snapshot."),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      within(screen.getByLabelText("Conversation")).getByText(
+        "Samsung Electronics and AAPL are ready as seeded market-data fixtures.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("deletes a previous conversation from the left rail", async () => {
+    vi.mocked(fetchConversations).mockResolvedValueOnce([
+      {
+        conversationId: "conv_aapl",
+        title: "AAPL",
+        status: "market_snapshot",
+        updatedAt: "2026-04-28T20:00:00Z",
+        lastMessage: "Here is the market snapshot for Apple.",
+      },
+    ]);
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "AAPL" });
+    fireEvent.click(screen.getByRole("button", { name: "Delete AAPL" }));
+
+    await waitFor(() => {
+      expect(deleteConversation).toHaveBeenCalledWith("conv_aapl");
+    });
+    expect(screen.queryByRole("button", { name: /^AAPL/ })).not.toBeInTheDocument();
+    expect(screen.getByText("No saved conversations")).toBeInTheDocument();
+  });
+
+  it("clears all conversations from settings", async () => {
+    vi.mocked(fetchConversations).mockResolvedValueOnce([
+      {
+        conversationId: "conv_aapl",
+        title: "AAPL",
+        status: "market_snapshot",
+        updatedAt: "2026-04-28T20:00:00Z",
+        lastMessage: "Here is the market snapshot for Apple.",
+      },
+    ]);
+    vi.mocked(clearConversations).mockResolvedValueOnce(1);
+    Object.defineProperty(window, "confirm", {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "AAPL" });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Security" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear chat history" }));
+
+    await waitFor(() => {
+      expect(clearConversations).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole("button", { name: /^AAPL/ })).not.toBeInTheDocument();
+  });
+
   it("opens a settings modal for general model and security settings", async () => {
     render(<App />);
 
@@ -179,10 +398,10 @@ describe("App", () => {
   it("saves and deletes local LLM credentials from the model settings", async () => {
     const configuredStatus = {
       configured: true,
-      provider: "openai",
-      model: "gpt-4.1-mini",
-      baseUrl: "https://api.openai.com/v1",
-      apiKeyMask: "sk-...7890",
+      provider: "cerebras",
+      model: "llama3.1-8b",
+      baseUrl: "https://api.cerebras.ai/v1",
+      apiKeyMask: "csk-...7890",
       keySource: "local_encrypted_state",
       createdAt: "2026-04-27T12:00:00+09:00",
       updatedAt: "2026-04-27T12:00:00+09:00",
@@ -199,21 +418,20 @@ describe("App", () => {
     await screen.findByRole("heading", { name: "Stock Analysis Agent" });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
-    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gpt-4.1-mini" } });
     fireEvent.change(screen.getByLabelText("API key"), {
-      target: { value: "sk-live-secret-7890" },
+      target: { value: "csk-live-secret-7890" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save API Key" }));
 
     await waitFor(() => {
       expect(saveLlmCredential).toHaveBeenCalledWith({
-        provider: "openai",
-        model: "gpt-4.1-mini",
+        provider: "cerebras",
+        model: "llama3.1-8b",
         baseUrl: null,
-        apiKey: "sk-live-secret-7890",
+        apiKey: "csk-live-secret-7890",
       });
     });
-    expect(screen.getByText("sk-...7890")).toBeInTheDocument();
+    expect(screen.getByText("csk-...7890")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete API Key" }));
 

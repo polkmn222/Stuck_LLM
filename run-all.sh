@@ -5,6 +5,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/src/backend"
 FRONTEND_DIR="$ROOT_DIR/src/frontend"
 
+if [ -f "$ROOT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
 BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
 BACKEND_PORT="${BACKEND_PORT:-8010}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
@@ -24,9 +31,22 @@ cleanup() {
   if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
     kill "$BACKEND_PID" 2>/dev/null || true
   fi
+  if [ -n "$FRONTEND_PID" ]; then
+    wait "$FRONTEND_PID" 2>/dev/null || true
+  fi
+  if [ -n "$BACKEND_PID" ]; then
+    wait "$BACKEND_PID" 2>/dev/null || true
+  fi
 }
 
-trap cleanup EXIT INT TERM
+shutdown() {
+  trap - EXIT INT TERM
+  cleanup
+  exit 130
+}
+
+trap cleanup EXIT
+trap shutdown INT TERM
 
 open_frontend() {
   local url="$1"
@@ -61,7 +81,7 @@ fi
 echo "Starting backend on $BACKEND_URL"
 (
   cd "$ROOT_DIR"
-  PYTHONPATH="$BACKEND_DIR" python3 -m uvicorn app.main:app \
+  PYTHONPATH="$BACKEND_DIR" exec python3 -m uvicorn app.main:app \
     --host "$BACKEND_HOST" \
     --port "$BACKEND_PORT"
 ) &
@@ -71,7 +91,7 @@ echo "Starting frontend on $FRONTEND_URL"
 (
   cd "$FRONTEND_DIR"
   VITE_API_BASE_URL="http://$BACKEND_HOST:$BACKEND_PORT" \
-    npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT"
+    exec npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT"
 ) &
 FRONTEND_PID=$!
 

@@ -1,8 +1,16 @@
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  MouseEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { UiCopy } from "../../shared/i18n";
 import type {
   CredentialProvider,
+  LlmConnectionTestResult,
   LlmCredentialStatus,
   SaveLlmCredentialRequest,
   UiPreferences,
@@ -13,41 +21,128 @@ type SettingsTab = "general" | "model" | "security";
 interface SettingsModalProps {
   copy: UiCopy["settingsModal"];
   credentialStatus: LlmCredentialStatus;
+  onClearConversations: () => Promise<number>;
   onClose: () => void;
   onDeleteCredential: () => Promise<LlmCredentialStatus>;
   onSaveCredential: (request: SaveLlmCredentialRequest) => Promise<LlmCredentialStatus>;
+  onTestCredential: () => Promise<LlmConnectionTestResult>;
   onUiPreferencesChange: (preferences: UiPreferences) => void;
   uiPreferences: UiPreferences;
 }
 
-const DEFAULT_PROVIDER: CredentialProvider = "openai";
-const DEFAULT_MODEL = "gpt-4.1-mini";
+const DEFAULT_PROVIDER: CredentialProvider = "cerebras";
+const DEFAULT_MODEL_BY_PROVIDER: Record<CredentialProvider, string> = {
+  openai: "gpt-4.1-mini",
+  anthropic: "claude-3-5-sonnet-latest",
+  cerebras: "llama3.1-8b",
+  custom: "",
+};
+const DEFAULT_BASE_URL_BY_PROVIDER: Record<CredentialProvider, string> = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+  cerebras: "https://api.cerebras.ai/v1",
+  custom: "",
+};
+const MODEL_OPTIONS_BY_PROVIDER: Partial<Record<CredentialProvider, string[]>> = {
+  cerebras: ["llama3.1-8b", "qwen-3-235b-a22b-instruct-2507"],
+};
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "a[href]",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
 
 export function SettingsModal({
   copy,
   credentialStatus,
+  onClearConversations,
   onClose,
   onDeleteCredential,
   onSaveCredential,
+  onTestCredential,
   onUiPreferencesChange,
   uiPreferences,
 }: SettingsModalProps) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [provider, setProvider] = useState<CredentialProvider>(
     credentialStatus.provider ?? DEFAULT_PROVIDER,
   );
-  const [model, setModel] = useState(credentialStatus.model ?? DEFAULT_MODEL);
+  const [model, setModel] = useState(
+    credentialStatus.model ?? DEFAULT_MODEL_BY_PROVIDER[DEFAULT_PROVIDER],
+  );
   const [baseUrl, setBaseUrl] = useState(credentialStatus.baseUrl ?? "");
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<LlmConnectionTestResult | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClearingConversations, setIsClearingConversations] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
 
   useEffect(() => {
-    setProvider(credentialStatus.provider ?? DEFAULT_PROVIDER);
-    setModel(credentialStatus.model ?? DEFAULT_MODEL);
+    const nextProvider = credentialStatus.provider ?? DEFAULT_PROVIDER;
+    setProvider(nextProvider);
+    setModel(credentialStatus.model ?? DEFAULT_MODEL_BY_PROVIDER[nextProvider]);
     setBaseUrl(credentialStatus.baseUrl ?? "");
+    setTestResult(null);
   }, [credentialStatus]);
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    return () => previousFocus?.focus();
+  }, []);
+
+  function focusableElements(): HTMLElement[] {
+    return Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
+    );
+  }
+
+  function handleBackdropClick(event: MouseEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const elements = focusableElements();
+    if (elements.length === 0) {
+      event.preventDefault();
+      return;
+    }
+
+    const firstElement = elements[0];
+    const lastElement = elements[elements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === firstElement) {
+      event.preventDefault();
+      lastElement.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === lastElement) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  }
 
   async function handleSaveCredential(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,7 +158,7 @@ export function SettingsModal({
     try {
       await onSaveCredential({
         provider,
-        model: trimmedModel || DEFAULT_MODEL,
+        model: trimmedModel || DEFAULT_MODEL_BY_PROVIDER[provider],
         baseUrl: baseUrl.trim() || null,
         apiKey: trimmedApiKey,
       });
@@ -72,6 +167,27 @@ export function SettingsModal({
       setError(copy.saveError);
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleTestCredential() {
+    setIsTesting(true);
+    setError(null);
+    try {
+      setTestResult(await onTestCredential());
+    } catch {
+      setTestResult({
+        configured: credentialStatus.configured,
+        status: "provider_error",
+        provider: credentialStatus.provider,
+        model: credentialStatus.model,
+        baseUrl: credentialStatus.baseUrl,
+        keySource: credentialStatus.keySource,
+        errorCode: null,
+        message: copy.testError,
+      });
+    } finally {
+      setIsTesting(false);
     }
   }
 
@@ -92,12 +208,66 @@ export function SettingsModal({
     }
   }
 
+  async function handleClearConversations() {
+    if (!window.confirm(copy.clearConversationsConfirm)) {
+      return;
+    }
+
+    setIsClearingConversations(true);
+    setError(null);
+    try {
+      await onClearConversations();
+    } catch {
+      setError(copy.clearConversationsError);
+    } finally {
+      setIsClearingConversations(false);
+    }
+  }
+
+  function defaultModelValues(): string[] {
+    return Object.values(DEFAULT_MODEL_BY_PROVIDER).filter(Boolean);
+  }
+
+  function defaultBaseUrlValues(): string[] {
+    return Object.values(DEFAULT_BASE_URL_BY_PROVIDER).filter(Boolean);
+  }
+
+  function handleProviderChange(nextProvider: CredentialProvider) {
+    setProvider(nextProvider);
+    if (!model.trim() || defaultModelValues().includes(model)) {
+      setModel(DEFAULT_MODEL_BY_PROVIDER[nextProvider]);
+    }
+    if (!baseUrl.trim() || defaultBaseUrlValues().includes(baseUrl)) {
+      setBaseUrl(DEFAULT_BASE_URL_BY_PROVIDER[nextProvider]);
+    }
+    setTestResult(null);
+  }
+
+  const modelOptions = MODEL_OPTIONS_BY_PROVIDER[provider] ?? [];
+
   return (
-    <div className="modal-backdrop" onKeyDown={(event) => event.key === "Escape" && onClose()}>
-      <section aria-label={copy.title} aria-modal="true" className="settings-dialog" role="dialog">
+    <div
+      className="modal-backdrop"
+      data-testid="settings-backdrop"
+      onClick={handleBackdropClick}
+      onKeyDown={handleDialogKeyDown}
+    >
+      <section
+        aria-label={copy.title}
+        aria-modal="true"
+        className="settings-dialog"
+        ref={dialogRef}
+        role="dialog"
+      >
         <header className="settings-dialog-header">
           <h2>{copy.title}</h2>
-          <button aria-label={copy.close} className="icon-button" onClick={onClose} type="button">
+          <button
+            aria-label={copy.close}
+            className="icon-button"
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
             x
           </button>
         </header>
@@ -184,26 +354,39 @@ export function SettingsModal({
                       aria-label={copy.provider}
                       name="provider"
                       onChange={(event) =>
-                        setProvider(event.target.value as CredentialProvider)
+                        handleProviderChange(event.target.value as CredentialProvider)
                       }
                       value={provider}
                     >
                       <option value="openai">{copy.providers.openai}</option>
                       <option value="anthropic">{copy.providers.anthropic}</option>
+                      <option value="cerebras">{copy.providers.cerebras}</option>
                       <option value="custom">{copy.providers.custom}</option>
                     </select>
+                    {provider === "anthropic" ? (
+                      <small>{copy.anthropicUnsupported}</small>
+                    ) : null}
+                    {provider === "cerebras" ? <small>{copy.cerebrasModelHint}</small> : null}
                   </label>
                   <label className="field">
                     <span>{copy.model}</span>
                     <input
                       aria-label={copy.model}
                       autoComplete="off"
+                      list={modelOptions.length ? "llm-model-options" : undefined}
                       name="model"
                       onChange={(event) => setModel(event.target.value)}
                       placeholder={copy.modelPlaceholder}
                       spellCheck={false}
                       value={model}
                     />
+                    {modelOptions.length ? (
+                      <datalist id="llm-model-options">
+                        {modelOptions.map((option) => (
+                          <option key={option} value={option} />
+                        ))}
+                      </datalist>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>{copy.baseUrl}</span>
@@ -239,6 +422,14 @@ export function SettingsModal({
                     </button>
                     <button
                       className="secondary-action"
+                      disabled={!credentialStatus.configured || isTesting}
+                      onClick={() => void handleTestCredential()}
+                      type="button"
+                    >
+                      {isTesting ? copy.testingConnection : copy.testConnection}
+                    </button>
+                    <button
+                      className="secondary-action"
                       disabled={!credentialStatus.configured || isDeleting}
                       onClick={() => void handleDeleteCredential()}
                       type="button"
@@ -247,6 +438,18 @@ export function SettingsModal({
                     </button>
                   </div>
                 </form>
+                {testResult ? (
+                  <div
+                    className={`connection-test-result is-${testResult.status}`}
+                    role="status"
+                  >
+                    <strong>
+                      {testResult.provider ?? "-"}
+                      {testResult.model ? ` / ${testResult.model}` : ""}
+                    </strong>
+                    <span>{testResult.message}</span>
+                  </div>
+                ) : null}
                 {error ? <p className="inline-error">{error}</p> : null}
               </section>
             ) : null}
@@ -268,6 +471,19 @@ export function SettingsModal({
                   </div>
                 </dl>
                 <p className="muted-copy">{copy.localOnly}</p>
+                <div className="settings-actions">
+                  <button
+                    className="secondary-action danger-action"
+                    disabled={isClearingConversations}
+                    onClick={() => void handleClearConversations()}
+                    type="button"
+                  >
+                    {isClearingConversations
+                      ? copy.clearingConversations
+                      : copy.clearConversations}
+                  </button>
+                </div>
+                {error ? <p className="inline-error">{error}</p> : null}
               </section>
             ) : null}
           </div>

@@ -51,6 +51,8 @@ Use this workflow for all application code in future phases. The repository is c
 - Mark excluded sources instead of deleting them.
 - Do not treat missing source data as neutral evidence.
 - Report failed sources in user-facing analysis results.
+- For market snapshots, model chart bars, key stats, and news explicitly when the provider returns them.
+- Do not use LLM credential storage for search/news/market-data keys.
 
 ## LLM Rules
 
@@ -58,3 +60,5 @@ Use this workflow for all application code in future phases. The repository is c
 - Responses must include buy, hold, sell probabilities plus confidence.
 - Evidence summaries must link back to stored source documents.
 - Model/provider selection belongs in settings and per-message metadata.
+- Generic chat, follow-up chat, and stock-analysis prompts are separate behaviors with separate tests.
+- A saved LLM API key is not complete until `/conversations` can use it for repeated user-visible replies.

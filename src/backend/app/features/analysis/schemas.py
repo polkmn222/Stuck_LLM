@@ -1,12 +1,22 @@
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.features.scoring.schemas import ScoreResponse
 from app.features.settings.schemas import AnalysisMode, DefaultMarket, HorizonType
 from app.shared.validation import require_timezone_datetime
 
-AnalysisStatus = Literal["completed", "needs_evidence"]
+AnalysisStatus = Literal["completed", "needs_evidence", "setup_needed", "provider_error"]
 EvidenceStance = Literal["bullish", "neutral", "bearish"]
+ProviderErrorCode = Literal[
+    "auth_error",
+    "rate_limited",
+    "timeout",
+    "malformed_output",
+    "unsupported_provider",
+    "invalid_base_url",
+    "provider_error",
+]
 
 
 class SourceDocumentInput(BaseModel):
@@ -19,6 +29,9 @@ class SourceDocumentInput(BaseModel):
     fetched_at: Optional[str] = None
     content_text: str = Field(min_length=1, max_length=8000)
     language: Optional[str] = None
+    adapter: Optional[str] = Field(default=None, max_length=64)
+    relevance_score: Optional[float] = Field(default=None, ge=0, le=1)
+    safety_flags: List[str] = Field(default_factory=list, max_length=12)
 
     @field_validator("published_at", "fetched_at")
     @classmethod
@@ -32,6 +45,13 @@ class SourceDocumentDecision(SourceDocumentInput):
     id: str
     included_in_analysis: bool
     exclusion_reason: Optional[str] = None
+
+
+class SourceAuditSummary(BaseModel):
+    source_warnings: List[str] = Field(default_factory=list, max_length=20)
+    included_by_source_type: Dict[str, int] = Field(default_factory=dict)
+    excluded_by_reason: Dict[str, int] = Field(default_factory=dict)
+    prompt_document_ids: List[str] = Field(default_factory=list, max_length=50)
 
 
 class EvidenceItem(BaseModel):
@@ -49,6 +69,7 @@ class AnalysisRequestCommand(BaseModel):
     horizon_type: HorizonType
     analysis_mode: AnalysisMode
     as_of_at: str
+    source_warnings: List[str] = Field(default_factory=list, max_length=20)
     source_documents: List[SourceDocumentInput] = Field(max_length=50)
 
     @field_validator("as_of_at")
@@ -68,9 +89,14 @@ class AnalysisResponse(BaseModel):
     as_of_at: str
     included_document_count: int
     excluded_document_count: int
+    source_audit: SourceAuditSummary
     source_documents: List[SourceDocumentDecision]
     evidence_items: List[EvidenceItem]
     summary: str
+    score_result: Optional[ScoreResponse] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    provider_error_code: Optional[ProviderErrorCode] = None
 
 
 class StoredAnalysisRecord(AnalysisResponse):

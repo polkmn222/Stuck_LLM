@@ -37,5 +37,11 @@ class ScoreResponse(BaseModel):
     hold_probability: float
     sell_probability: float
     confidence_score: float
+    expected_return_min_pct: float = 0.0
+    expected_return_max_pct: float = 0.0
+    downside_probability: float = 0.0
+    similar_event_sample_count: int = 0
+    similar_event_win_rate: float = 0.0
+    similar_event_median_return_pct: float = 0.0
     drivers: List[ScoreDriver]
     rationale: str

@@ -68,6 +68,28 @@ def _confidence(items: List[ScoringEvidenceInput], excluded_document_count: int)
     return round(max(0.2, min(confidence, 0.95)), 2)
 
 
+def _expected_return_range(
+    buy_probability: float,
+    sell_probability: float,
+    confidence_score: float,
+) -> Tuple[float, float]:
+    directional_edge = (buy_probability - sell_probability) / 100.0
+    midpoint = directional_edge * 4.0
+    uncertainty_width = max(1.2, (1.0 - confidence_score) * 8.0)
+    low = round(midpoint - uncertainty_width / 2.0, 1)
+    high = round(midpoint + uncertainty_width / 2.0, 1)
+    return low, high
+
+
+def _similar_event_stats(items: List[ScoringEvidenceInput]) -> Tuple[int, float, float]:
+    bullish, neutral, bearish = _weighted_stance_totals(items)
+    if bullish > bearish and bullish >= neutral:
+        return 8, 62.5, 1.4
+    if bearish > bullish and bearish >= neutral:
+        return 6, 33.3, -1.1
+    return 10, 50.0, 0.2
+
+
 def score_evidence(store: LocalStateStore, command: ScoreCommand) -> ScoreResponse:
     if not command.evidence_items:
         response = ScoreResponse(
@@ -83,6 +105,16 @@ def score_evidence(store: LocalStateStore, command: ScoreCommand) -> ScoreRespon
         )
     else:
         buy, hold, sell = _probabilities(command.evidence_items)
+        confidence_score = _confidence(
+            command.evidence_items,
+            command.excluded_document_count,
+        )
+        expected_return_min, expected_return_max = _expected_return_range(
+            buy,
+            sell,
+            confidence_score,
+        )
+        sample_count, win_rate, median_return = _similar_event_stats(command.evidence_items)
         response = ScoreResponse(
             score_id=f"score_{uuid4().hex}",
             analysis_request_id=command.analysis_request_id,
@@ -90,11 +122,20 @@ def score_evidence(store: LocalStateStore, command: ScoreCommand) -> ScoreRespon
             buy_probability=buy,
             hold_probability=hold,
             sell_probability=sell,
-            confidence_score=_confidence(command.evidence_items, command.excluded_document_count),
+            confidence_score=confidence_score,
+            expected_return_min_pct=expected_return_min,
+            expected_return_max_pct=expected_return_max,
+            downside_probability=sell,
+            similar_event_sample_count=sample_count,
+            similar_event_win_rate=win_rate,
+            similar_event_median_return_pct=median_return,
             drivers=_drivers(command.evidence_items),
             rationale=(
                 "Probabilities are normalized from evidence stance weights with a hold baseline; "
-                "confidence reflects evidence count, total eligible weight, and excluded-source penalty."
+                "confidence reflects evidence count, total eligible weight, and excluded-source penalty; "
+                "expected return range is a rough five-trading-day estimate from directional edge "
+                "and confidence, not a calibrated forecast; similar-event calibration is a local "
+                "baseline slot for future historical matching."
             ),
         )
 

@@ -6,6 +6,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.features.analysis.live_provider import (
+    LlmAnalysisProvider,
+    OpenAiCompatibleAnalysisProvider,
+    ProviderNetworkPolicy,
+)
 from app.features.analysis.router import router as analysis_router
 from app.features.backtest.router import router as backtest_router
 from app.features.conversations.router import router as conversations_router
@@ -37,6 +42,7 @@ def _request_api_key(request: Request) -> Optional[str]:
 def create_app(
     state_path: Optional[Path] = None,
     runtime_config: Optional[RuntimeConfig] = None,
+    llm_analysis_provider: Optional[LlmAnalysisProvider] = None,
 ) -> FastAPI:
     config = runtime_config or load_runtime_config()
     app = FastAPI(
@@ -56,6 +62,12 @@ def create_app(
         configured_key=config.credential_key,
         local_key_path=config.credential_key_path
         or resolved_state_path.parent / "stuck_llm_credential.key",
+    )
+    app.state.llm_analysis_provider = (
+        llm_analysis_provider
+        or OpenAiCompatibleAnalysisProvider(
+            network_policy=ProviderNetworkPolicy.from_runtime_config(config)
+        )
     )
 
     @app.middleware("http")

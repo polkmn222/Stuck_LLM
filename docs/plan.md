@@ -17,7 +17,7 @@ The product is an investment decision-support tool, not an automated trading or 
 - If the user provides an analysis date/time, evidence published after that timestamp must be excluded.
 - Future price data may be used only in PnL or backtest views, not in historical evidence analysis.
 - Users may add URLs or raw text in addition to default automated search.
-- API keys should support both UI entry and environment-variable fallback.
+- LLM API keys must be explicitly saved by the user in Settings; environment variables are not used as LLM API-key fallback.
 - The MVP starts as a local web app, but should keep a service-oriented path for team or hosted use later.
 
 ## Non-Goals For MVP
@@ -170,6 +170,76 @@ Skill discovery index:
 
 ## Planned Build Phases
 
+- `phase_088`: News source validation, documentation, backups, and push preparation.
+- `phase_087`: Korean prediction intent fallback so `애플 예측` routes to live analysis without relying on LLM intent classification.
+- `phase_086`: Optional Naver News and public social-search providers for news digest coverage.
+- `phase_085`: Diverse important-article selection across categories and source domains.
+- `phase_084`: Diversified company-event news queries including product/AI, leadership, regulation, analyst, and S&P Global research searches.
+- `phase_083`: Korean news typo recovery for requests such as `애플 뉴ㅛㅡ`.
+- `phase_082`: Prediction documentation, backups, and full validation.
+- `phase_081`: Similar-event calibration baseline fields for sample count, win rate, and median return.
+- `phase_080`: Historical buy-date PnL simulation in chat with separate `backtest_result` payloads.
+- `phase_079`: Expected return range and downside risk metadata on scored predictions.
+- `phase_078`: Market-data evidence bundle from current quote and chart context.
+- `phase_077`: Five-trading-day default prediction probabilities in chat and analysis UI.
+- `phase_076`: News polish documentation, backups, and full validation.
+- `phase_075`: ChatGPT-style Korean news digest UI with key headlines, favicon cards, and overflow-safe snippets.
+- `phase_074`: LLM JSON news summary parsing for Korean article headlines and summaries.
+- `phase_073`: News importance categories and priority ordering across official, earnings, business, controversy, and market stories.
+- `phase_072`: News query and ranking refinement to demote quote/history pages and target real company news.
+- `phase_071`: `run-all.sh` Ctrl+C shutdown handling so backend and frontend terminate together.
+- `phase_070`: Local backend validation tooling install for Ruff and MyPy.
+- `phase_069`: News digest documentation, backups, and full backend/frontend validation.
+- `phase_068`: ChatGPT-style news digest UI with linked top stories, expandable extra articles, and provider transparency.
+- `phase_067`: Conversation routing for news requests without quote-horizon analysis requirements.
+- `phase_066`: LLM-backed news overview generation with deterministic fallback and source-grounding constraints.
+- `phase_065`: News query normalization, provider result dedupe, ranking, and important/additional article split.
+- `phase_064`: News digest provider contract using Tavily, GNews, SerpApi Google News, and SerpApi Google Web.
+- `phase_063`: Provider-backed USD/KRW display conversion for Korean US-stock snapshot text.
+- `phase_062`: Local S&P 500 symbol directory routing for US quote lookup under a KR default market.
+- `phase_061`: GPT-style chat auto-scroll to the newest conversation content.
+- `phase_060`: Chart hover tooltip plus thinner selected-window directional line styling.
+- `phase_059`: Readable finance chart port from `gpt-coding/finance_app.py` behavior plus fresh `New chat` reset.
+- `phase_058`: Google Finance-style chart context with active window, start reference, latest marker, and exchange-local axis labels.
+- `phase_057`: US snapshot currency policy that keeps graph data in USD and adds KRW conversion in Korean chat copy.
+- `phase_056`: Search-style and localized US ticker normalization for Apple and Google plus graph-first SerpApi candidate selection.
+- `phase_055`: Ambiguous chat follow-up handling and stock-only snapshot guard to prevent `/conversations` 500s.
+- `phase_054`: ChatGPT-style in-flight activity copy while LLM and data requests are pending.
+- `phase_053`: LLM-confirmed localized Korean input to US ticker market snapshots.
+- `phase_052`: Conversation deletion and left-rail settings isolation.
+- `phase_051`: Frontend US graph period controls backed by market-data refetches.
+- `phase_050`: US Google Finance market-data API `window` contract and bidirectional exchange-query fallback.
+- `phase_049`: Runtime comparison between `gpt-coding` Google Finance Streamlit apps and the current FastAPI/React implementation.
+- `phase_048`: SerpApi Google News ingestion adapter for source documents.
+- `phase_047`: Nested SerpApi Google Finance news parsing for market snapshots.
+- `phase_046`: SerpApi Google Finance query candidate fallback for unmapped US tickers.
+- `phase_045`: Structural and documentation garbage-collection lint for feature boundaries, backup policy, phase freshness, and agent-workflow drift detection.
+- `phase_044`: Agent-readable observability reports for request IDs, provider calls, conversation status transitions, market snapshots, and validation failures.
+- `phase_043`: Eval corpus harness CLI that runs deterministic analysis/scoring/source-safety cases outside pytest and emits stable reports.
+- `phase_042`: Browser and user-journey harness with Playwright checks for saved-key chat, follow-up conversations, ticker snapshots, and previous-chat reload.
+- `phase_041`: Agent harness foundation with `./run-harness.sh`, validation profiles, dry-run inspection, and JSON/Markdown reports.
+- `phase_040`: Agent workflow provider-validation policy requiring real `/conversations` API-key checks, repeated follow-up validation, credential boundary clarity, and rich snapshot expectations.
+- `phase_039`: ChatGPT-style conversation workspace with left-rail saved conversation loading, internal chat scrolling, and message-level chart/news/stat preservation.
+- `phase_038`: Persistent LLM simple chat, conversation summaries, message-level market snapshots, ticker-only snapshot flow, and SerpApi key stats/news parsing.
+- `phase_037`: Cerebras provider header compatibility with explicit JSON accept and non-urllib User-Agent, verified through the saved credential connection test.
+- `phase_036`: Minimal reusable market quote card in chat and analysis with stock name, symbol, price, exchange, as-of timestamp, and SVG line chart.
+- `phase_035`: User-selected LLM credential policy with Cerebras-first setup, no environment fallback, and red missing-key UI copy.
+- `phase_034`: Prompt grounding contract integration for explicit allowed source IDs and structured-output citation validation.
+- `phase_033`: Eval-only source quality and evidence weighting helpers based on metadata reliability, freshness, and relevance.
+- `phase_032`: Source safety eval rules for prompt-injection, schema-spoofing, official-source spoofing, and metadata/body-date mismatch checks.
+- `phase_031`: Deterministic analysis eval harness for cutoff safety, source grounding, probability consistency, and confidence/evidence invariants.
+- `phase_030`: End-to-end validation across provider diagnostics, generative chat orchestration, settings-language responses, SerpApi market data, and improved chart rendering.
+- `phase_029`: Market chart UX refresh with period controls, clearer axes, source/time labels, hover or focus details, and separate quote-line versus OHLC semantics.
+- `phase_028`: SerpApi Google Finance refinement with market-qualified ticker parsing, US ticker auto-routing, configurable graph windows, source/news handling, and safe provider diagnostics.
+- `phase_027`: Settings-language response policy so backend-generated assistant copy and LLM prompts follow the selected UI language before falling back to message-language detection.
+- `phase_026`: Generative chat orchestration that lets the LLM interpret intent, stock, horizon, source hints, and follow-up needs through structured JSON while keeping deterministic validation gates.
+- `phase_025`: LLM provider connection diagnostics for saved credentials, Cerebras comparison-model defaults, safe auth/rate-limit/base-URL error surfacing, and Settings modal test controls.
+- `phase_024`: Cerebras OpenAI-compatible live LLM test provider using `CEREBRAS_API_KEY`, official base URL defaults, structured-output payload compatibility, and settings/provider typing.
+- `phase_023`: Evidence source audit trail with source warnings, safety flags, inclusion/exclusion reason summaries, prompt document IDs, and analysis-panel rendering.
+- `phase_022`: SerpApi Google Finance provider for US market snapshots, quote line charts, and safe fallback to FinanceDataReader/seeded fixtures.
+- `phase_021`: OpenAI-compatible provider policy, DNS safety, custom/local opt-in, retry/timeout, and live prompt budget controls.
+- `phase_020`: Review-filtered security hardening, prompt delimiters, provider base URL validation, local-state concurrency, frontend accessibility, API aborts, and CI.
+- `phase_019`: FinanceDataReader price snapshots/charts, Naver/Tavily/GNews search ingestion, `.env` provider loading, and chart UX in chat/analysis panels.
 - `phase_018`: Live LLM provider analysis integration with BYOK credential gating, source-grounded prompts, structured output parsing, and Korean/English setup/error responses.
 - `phase_011`: Hosted readiness guard, public-response hardening, and validation cleanup.
 - `phase_017`: ChatGPT-style settings modal and workspace navigation split.
@@ -191,6 +261,34 @@ Skill discovery index:
 
 ## Decision Log
 
+- `phase_081`: Similar-event calibration is exposed as a replaceable baseline slot, not a statistically validated historical matching model.
+- `phase_080`: Buy-date questions return separate PnL simulations and must not create analysis requests or feed future prices into historical LLM evidence.
+- `phase_079`: Expected return range is a rough five-trading-day heuristic derived from directional score edge and confidence until calibrated backtests exist.
+- `phase_078`: Current market snapshot and eligible chart context may become `market_data` evidence at `as_of_at`; future PnL/backtest data remains excluded from analysis prompts.
+- `phase_077`: Prediction-like no-horizon requests default to `swing`, presented as the next five trading days; generic analysis requests may still ask for horizon.
+- `phase_058`: Keep the current dependency-free SVG chart, but add the chart context users expected from the standalone Google Finance app.
+- `phase_057`: Keep US quote payloads and graphs in USD; Korean assistant copy may add approximate KRW conversion using `STUCK_LLM_USD_KRW_RATE` or an offline fallback until a real FX provider exists.
+- `phase_056`: Treat `애플`/Apple/AAPL and `구글`/Google/GOOG as deterministic quote aliases, superseding the earlier phase_053 requirement that `애플` require LLM confirmation.
+- `phase_055`: A resolved stock plus no analysis intent should return a market snapshot; LLM `needs_follow_up` should become the assistant's one focused clarification question.
+- `phase_054`: Use a client-side pending activity message for immediate ChatGPT-style feedback before adding backend streaming or per-provider progress events.
+- `phase_053`: Localized names such as `애플` are not added as deterministic aliases; a saved LLM intent can infer `AAPL` and the app persists a confirmation candidate before fetching market data.
+- `phase_052`: Delete local conversation history through explicit DELETE APIs and keep Settings outside the conversation scroll area so it remains a stable bottom action.
+- `phase_051`: Fetch chart windows on demand from the active message card instead of preloading all periods, preserving older snapshots and SerpApi quota.
+- `phase_050`: Treat chart period as a market-data API query parameter, not frontend-only state, so selected windows are reflected in the provider request and returned quote metadata.
+- `phase_049`: Bring over the standalone graph app's SerpApi `window` and candidate behavior first; keep the separate Google News app out of scope until graph interaction is stable.
+- `phase_048`: Add SerpApi Google News as an ingestion adapter, not a parallel analysis path, so source documents still use the existing safety flags, cutoff filtering, and prompt-grounding contracts.
+- `phase_047`: Treat nested Google Finance news section wrappers as containers and expose only article-level items in market snapshots.
+- `phase_046`: Keep SerpApi Google Finance fallback inside the market-data provider and try exchange-qualified candidates before falling back to FinanceDataReader or fixtures.
+- `phase_041`: Harness engineering starts with a small local command runner and agent-readable reports before adding browser automation, eval corpora, observability, or structural garbage collection.
+- `phase_041`: `phase_042` through `phase_045` remain documented future work so the first harness slice stays limited to command orchestration and reporting.
+- `phase_040`: Provider/API-key work is incomplete unless the saved key is exercised through `/conversations` and repeated same-conversation follow-up, not only Settings diagnostics.
+- `phase_039`: Market snapshots belong to the message that produced them so later follow-up messages cannot erase earlier charts, news, or stats from the chat history.
+- `phase_038`: Ticker-only inputs such as `AAPL` should return a market snapshot with available chart/news/stats before asking for analysis horizon; buy/sell/compare analysis intents still require horizon validation.
+- `phase_038`: LLM provider credentials remain saved-user-key only, while `SERPAPI_API_KEY` and other search/news/market-data keys stay environment-configured and separate.
+- `phase_034`: Tighten the existing live-analysis prompt contract instead of adding a parallel analysis package or broad prompt rewrite.
+- `phase_033`: Keep source quality eval-only until the product UI and scoring semantics are ready to expose quality fields.
+- `phase_032`: Treat source safety as deterministic eval coverage first, before changing live prompts or source-quality weighting.
+- `phase_031`: Add deterministic offline evals before expanding source safety and source quality so cutoff, grounding, probability, and confidence invariants can be regression-tested without live providers.
 - `phase_001`: Prioritize investment decision support before trading automation.
 - `phase_001`: Korean stocks first; US and global sources remain in the design.
 - `phase_001`: Use buy/hold/sell probabilities with source-level auditability.
@@ -218,6 +316,35 @@ Skill discovery index:
 - `phase_010`: Ingestion collects source documents and metadata, while analysis remains responsible for `as_of_at` inclusion/exclusion decisions.
 - `phase_010`: Server-side arbitrary URL fetching and crawler execution are intentionally excluded from the adapter MVP.
 - `phase_011`: Local mode remains unauthenticated by default; hosted mode can require a static API key through environment variables until real user login is selected.
+- `phase_019`: Market snapshots use FinanceDataReader opportunistically and fall back to seeded fixtures when live data is unavailable.
+- `phase_019`: Price/chart bars are response data for UX and must not be inserted into LLM source evidence or historical prompt context.
+- `phase_019`: Naver, Tavily, and GNews search/news adapters normalize external content into untrusted source documents with safe missing-credential warnings.
+- `phase_019`: Local `.env` keys may configure search/news/market-data providers, but LLM analysis no longer uses environment API-key fallback after `phase_035`.
+- `phase_020`: Claude-review findings are accepted only after local verification; false positives should not become phase scope.
+- `phase_020`: LLM provider base URLs must be public HTTPS API origins by default; local/private/metadata endpoints are rejected before outbound calls.
+- `phase_020`: Prompt context uses source-level untrusted delimiters plus escaped JSON payloads so source text cannot spoof prompt structure.
+- `phase_020`: Concurrent conversation appends merge against the latest stored messages before writing local JSON state.
+- `phase_021`: OpenAI-compatible live calls should use official OpenAI endpoints by default; hosted non-official endpoints require an explicit allowlist.
+- `phase_021`: Custom OpenAI-compatible providers are opt-in, and localhost/private endpoints are local-development only.
+- `phase_021`: DNS resolution is part of provider URL validation for non-official hosts, but hosted egress policy remains the primary production control.
+- `phase_021`: Live LLM calls use bounded retry, timeout, and prompt/source budget controls before adding additional vendor adapters.
+- `phase_021`: Anthropic credentials remain storable for setup continuity, but live Anthropic calls stay deferred until a dedicated adapter phase.
+- `phase_022`: US market snapshots should prefer SerpApi Google Finance when `SERPAPI_API_KEY` is configured, then fall back to FinanceDataReader and seeded fixtures.
+- `phase_022`: SerpApi graph data supports quote line charts, but it is not full OHLC candle data and must not be used as authoritative backtest input.
+- `phase_022`: The SQLite conversation-store idea is deferred; conversation storage/orchestration should be handled in a separate phase.
+- `phase_023`: Analysis responses should carry a compact source audit trail so users can see source warnings, included/excluded source counts, exclusion reasons, and exactly which source IDs entered the prompt.
+- `phase_023`: Source audit metadata may expose safe provider/status codes and source-level flags, but not raw source body text, API keys, provider internals, or future-evidence content.
+- `phase_024`: Cerebras uses the OpenAI-compatible live provider path with `https://api.cerebras.ai/v1`, saved user API keys, and `gpt-oss-120b` as the local-test default model.
+- `phase_035`: Follow DeepTutor's explicit provider-binding pattern at the product level: provider, model, base URL, and API key are selected/configured deliberately, and LLM calls require a saved user key.
+- `phase_035`: Environment variables are not used as LLM credential fallback; missing saved keys return setup-needed copy and the chat UI renders the API-key prompt in error red.
+- `phase_025`: Provider health should be testable directly from Settings without running a full stock-analysis prompt or exposing raw provider responses.
+- `phase_025`: Cerebras remains a long-running comparison provider; the local default model is updated to `llama3.1-8b` based on the user's currently available key, while `qwen-3-235b-a22b-instruct-2507` stays available for later performance comparison.
+- `phase_025`: Connection diagnostics return user-safe status codes and messages; raw keys, provider response bodies, and low-level network details remain server-side.
+- `phase_025`: Generative chat orchestration, language-policy changes, SerpApi refinement, and chart redesign are recorded as separate future phases rather than bundled into provider diagnostics.
+- `phase_026`: Configured OpenAI-compatible providers may extract structured chat intent before analysis, but deterministic quote resolution, typo confirmation, horizon validation, and credential gates remain authoritative.
+- `phase_026`: LLM source hints can narrow collection to known adapter families; arbitrary user URLs and raw-text ingestion remain excluded until a dedicated ingestion phase.
+- `phase_027`: Chat requests may carry an explicit UI-selected response language; backend copy and LLM prompts use it before falling back to message-language detection.
+- `phase_027`: UI language remains a local frontend preference, passed per chat request rather than persisted into backend analysis settings.
 - `phase_011`: Public analysis API responses must not expose internal LLM prompt material.
 - `phase_011`: Request-boundary validation should reject malformed timestamps and oversized text before service logic runs.
 - `phase_011`: Project-local skill descriptions should stay concise so the skills index loads without context-budget warnings.
@@ -235,3 +362,6 @@ Skill discovery index:
 - `phase_017`: Frontend credential UI must use masked credential status and send raw keys only on explicit save.
 - `phase_018`: Live LLM calls must be credential-gated, source-grounded, structured, and separate from deterministic test/fallback providers.
 - `phase_018`: Missing credentials should produce setup-needed assistant responses in the user's language instead of pretending that live analysis ran.
+- `phase_018`: Chat-ready requests use the live analysis path only after stock and horizon are resolved; deterministic analysis remains available through the analysis endpoint.
+- `phase_018`: The first live adapter is OpenAI-compatible with structured JSON output; unsupported providers must fail with explicit user-safe statuses.
+- `phase_018`: Raw BYOK credentials are decrypted only at the live provider-call edge and must not appear in prompts, responses, logs, or stored analysis records.

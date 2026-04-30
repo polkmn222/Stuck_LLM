@@ -2,11 +2,19 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
-CredentialProvider = Literal["openai", "anthropic", "custom"]
+CredentialProvider = Literal["openai", "anthropic", "cerebras", "custom"]
+LlmConnectionTestStatus = Literal["ok", "setup_needed", "provider_error"]
+
+CEREBRAS_DEFAULT_MODEL = "llama3.1-8b"
+CEREBRAS_COMPARISON_MODELS = [
+    CEREBRAS_DEFAULT_MODEL,
+    "qwen-3-235b-a22b-instruct-2507",
+]
 
 DEFAULT_BASE_URLS = {
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
+    "cerebras": "https://api.cerebras.ai/v1",
 }
 
 
@@ -42,6 +50,17 @@ class LlmCredentialStatus(BaseModel):
     key_source: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class LlmConnectionTestResult(BaseModel):
+    configured: bool
+    status: LlmConnectionTestStatus
+    provider: Optional[CredentialProvider] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+    key_source: Optional[str] = None
+    error_code: Optional[str] = None
+    message: str
 
 
 class LlmCredentialSecret(BaseModel):

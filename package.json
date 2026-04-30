@@ -1,0 +1,10 @@
+{
+  "name": "stuck-llm-workspace",
+  "private": true,
+  "scripts": {
+    "design:lint": "design.md lint DESIGN.md"
+  },
+  "devDependencies": {
+    "@google/design.md": "^0.1.1"
+  }
+}

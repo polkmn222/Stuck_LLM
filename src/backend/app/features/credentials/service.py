@@ -2,9 +2,16 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from app.features.credentials.schemas import (
+    LlmConnectionTestResult,
     LlmCredentialSecret,
     LlmCredentialStatus,
     LlmCredentialUpsert,
+)
+from app.features.analysis.live_provider import (
+    LiveProviderError,
+    LlmProviderConfig,
+    OpenAiCompatibleAnalysisProvider,
+    ProviderNetworkPolicy,
 )
 from app.shared.credential_crypto import CredentialCipher
 from app.shared.state_store import LocalStateStore, State
@@ -78,16 +85,91 @@ def delete_llm_credential(store: LocalStateStore) -> LlmCredentialStatus:
     return store.update(mutate)
 
 
+def _connection_test_provider(
+    network_policy: ProviderNetworkPolicy,
+) -> OpenAiCompatibleAnalysisProvider:
+    return OpenAiCompatibleAnalysisProvider(network_policy=network_policy)
+
+
+def _connection_error_message(code: str) -> str:
+    messages = {
+        "auth_error": "Authentication failed. Check the saved provider key.",
+        "rate_limited": "The provider is rate limiting connection tests. Retry later.",
+        "timeout": "The provider timed out during the connection test.",
+        "malformed_output": "The provider responded, but the test response was malformed.",
+        "unsupported_provider": "The selected provider is not connected for live analysis yet.",
+        "invalid_base_url": "The saved provider base URL is not allowed.",
+        "provider_error": "The provider connection test failed.",
+    }
+    return messages.get(code, messages["provider_error"])
+
+
+def _credential_secret_and_source(
+    store: LocalStateStore,
+    cipher: CredentialCipher,
+) -> tuple[Optional[LlmCredentialSecret], Optional[str]]:
+    record = store.read()["llm_credentials"].get(LLM_CREDENTIAL_KEY)
+    if record is None:
+        return None, None
+    return (
+        LlmCredentialSecret(
+            provider=record["provider"],
+            model=record["model"],
+            base_url=record["base_url"],
+            api_key=cipher.decrypt(record["encrypted_api_key"]),
+        ),
+        record["key_source"],
+    )
+
+
+def test_llm_credential_connection(
+    store: LocalStateStore,
+    cipher: CredentialCipher,
+    network_policy: ProviderNetworkPolicy,
+) -> LlmConnectionTestResult:
+    credential, key_source = _credential_secret_and_source(store, cipher)
+    if credential is None:
+        return LlmConnectionTestResult(
+            configured=False,
+            status="setup_needed",
+            message="Save an LLM provider key before testing the connection.",
+        )
+
+    provider_config = LlmProviderConfig(
+        provider=credential.provider,
+        model=credential.model,
+        base_url=credential.base_url,
+        api_key=credential.api_key,
+    )
+
+    try:
+        _connection_test_provider(network_policy).test_connection(provider_config)
+    except LiveProviderError as error:
+        return LlmConnectionTestResult(
+            configured=True,
+            status="provider_error",
+            provider=credential.provider,
+            model=credential.model,
+            base_url=credential.base_url,
+            key_source=key_source,
+            error_code=error.code,
+            message=_connection_error_message(error.code),
+        )
+
+    return LlmConnectionTestResult(
+        configured=True,
+        status="ok",
+        provider=credential.provider,
+        model=credential.model,
+        base_url=credential.base_url,
+        key_source=key_source,
+        message="Connection test succeeded.",
+    )
+
+
 def get_llm_credential_secret(
     store: LocalStateStore,
     cipher: CredentialCipher,
 ) -> Optional[LlmCredentialSecret]:
-    record = store.read()["llm_credentials"].get(LLM_CREDENTIAL_KEY)
-    if record is None:
-        return None
-    return LlmCredentialSecret(
-        provider=record["provider"],
-        model=record["model"],
-        base_url=record["base_url"],
-        api_key=cipher.decrypt(record["encrypted_api_key"]),
-    )
+    credential, _ = _credential_secret_and_source(store, cipher)
+    return credential

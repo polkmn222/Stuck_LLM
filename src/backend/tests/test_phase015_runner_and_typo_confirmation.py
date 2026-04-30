@@ -16,6 +16,19 @@ class QuoteCandidateProtocol:
     canonical_name: str
 
 
+def _clear_openai_environment(monkeypatch) -> None:
+    for name in [
+        "OPENAI_API_KEY",
+        "OpenAI_API_Key",
+        "OPENAI_MODEL",
+        "OPENAI_BASE_URL",
+        "CEREBRAS_API_KEY",
+        "CEREBRAS_MODEL",
+        "CEREBRAS_BASE_URL",
+    ]:
+        monkeypatch.delenv(name, raising=False)
+
+
 def test_likely_stock_typo_is_not_exact_alias_but_has_confirmation_candidate() -> None:
     assert market_data_service.resolve_quote_from_text("삼성전가 주가 알려줘", "KR") is None
 
@@ -54,7 +67,9 @@ def test_typo_with_horizon_still_requires_stock_confirmation(tmp_path: Path) -> 
 
 def test_affirmative_follow_up_confirms_stock_candidate_and_records_horizon(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    _clear_openai_environment(monkeypatch)
     client = TestClient(create_app(state_path=tmp_path / "state.json"))
 
     created_response = client.post(
@@ -70,11 +85,11 @@ def test_affirmative_follow_up_confirms_stock_candidate_and_records_horizon(
 
     assert appended_response.status_code == 200
     body = appended_response.json()
-    assert body["status"] == "ready_for_analysis"
+    assert body["status"] == "setup_needed"
     assert body["missing_inputs"] == []
     assert body["analysis_request"]["symbol"] == "005930"
     assert body["analysis_request"]["horizon_type"] == "swing"
-    assert "LLM 분석은 아직 연결되지 않았습니다" in body["messages"][-1]["content"]
+    assert "API key" in body["messages"][-1]["content"]
 
 
 def test_non_affirmative_follow_up_does_not_confirm_stock_candidate(tmp_path: Path) -> None:
@@ -104,3 +119,15 @@ def test_run_all_opens_frontend_by_default_and_can_disable_auto_open() -> None:
     assert 'AUTO_OPEN_BROWSER="${AUTO_OPEN_BROWSER:-1}"' in run_all_text
     assert 'open_frontend "$FRONTEND_URL"' in run_all_text
     assert 'if [ "$AUTO_OPEN_BROWSER" = "1" ]; then' in run_all_text
+
+
+def test_run_all_ctrl_c_uses_shutdown_trap_and_execs_server_processes() -> None:
+    run_all_text = (ROOT_DIR / "run-all.sh").read_text()
+
+    assert "shutdown() {" in run_all_text
+    assert "trap shutdown INT TERM" in run_all_text
+    assert "trap cleanup EXIT" in run_all_text
+    assert "exec python3 -m uvicorn app.main:app" in run_all_text
+    assert "exec npm run dev" in run_all_text
+    assert 'wait "$FRONTEND_PID" 2>/dev/null || true' in run_all_text
+    assert 'wait "$BACKEND_PID" 2>/dev/null || true' in run_all_text

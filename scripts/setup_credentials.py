@@ -14,7 +14,11 @@ BACKEND_DIR = ROOT_DIR / "src" / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.features.credentials.schemas import CredentialProvider, LlmCredentialUpsert  # noqa: E402
+from app.features.credentials.schemas import (  # noqa: E402
+    CEREBRAS_DEFAULT_MODEL,
+    CredentialProvider,
+    LlmCredentialUpsert,
+)
 from app.features.credentials.service import save_llm_credential  # noqa: E402
 from app.shared.credential_crypto import CredentialCipher  # noqa: E402
 from app.shared.state_store import LocalStateStore, default_state_path  # noqa: E402
@@ -34,14 +38,26 @@ def _default_base_url(provider: str) -> Optional[str]:
         return "https://api.openai.com/v1"
     if provider == "anthropic":
         return "https://api.anthropic.com/v1"
+    if provider == "cerebras":
+        return "https://api.cerebras.ai/v1"
     return None
+
+
+def _default_model(provider: str) -> str:
+    if provider == "openai":
+        return "gpt-4o-mini"
+    if provider == "anthropic":
+        return "claude-3-5-sonnet-latest"
+    if provider == "cerebras":
+        return CEREBRAS_DEFAULT_MODEL
+    return "openai-compatible-model"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Configure encrypted local BYOK LLM credentials."
     )
-    parser.add_argument("--provider", choices=["openai", "anthropic", "custom"])
+    parser.add_argument("--provider", choices=["cerebras", "openai", "anthropic", "custom"])
     parser.add_argument("--model")
     parser.add_argument("--base-url")
     parser.add_argument("--api-key")
@@ -55,9 +71,9 @@ def main() -> int:
     args = parse_args()
     provider = cast(
         CredentialProvider,
-        args.provider or _prompt("Provider (openai, anthropic, custom)", "openai"),
+        args.provider or _prompt("Provider (cerebras, openai, anthropic, custom)", "cerebras"),
     )
-    model = args.model or _prompt("Model", "gpt-4o-mini")
+    model = args.model or _prompt("Model", _default_model(provider))
     base_url = args.base_url
     if base_url is None:
         base_url = _prompt("Base URL", _default_base_url(provider))

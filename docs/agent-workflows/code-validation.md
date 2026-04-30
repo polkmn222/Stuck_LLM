@@ -11,6 +11,18 @@ rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs
 wc -l AGENTS.md docs/*.md docs/agent-workflows/*.md
 ```
 
+## Harness Checks
+
+Use the project harness when an agent needs one command with an agent-readable report:
+
+```bash
+./run-harness.sh --profile quick
+./run-harness.sh --profile full --keep-going
+./run-harness.sh --profile docs --dry-run
+```
+
+Harness reports are written under `artifacts/harness/` and ignored by git. Use `--dry-run` to inspect selected commands before running expensive profiles.
+
 ## Future Backend Checks
 
 Use these backend commands:
@@ -47,3 +59,6 @@ cd src/frontend && npm audit --audit-level=high
 - Record validation commands and results in `docs/implement.md`.
 - If a validation tool is not configured yet, state that clearly in the phase notes.
 - Do not mark a phase complete when known validation failures remain.
+- Provider/API-key phases must include a `/conversations` test that proves user-visible use of the saved key.
+- Conversation phases must test repeated follow-up messages and reloading saved conversations by ID.
+- Rich market-data phases must test schema mapping and UI rendering for chart, key stats, and news when available.

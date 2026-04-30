@@ -48,6 +48,10 @@ def test_scoring_converts_weighted_evidence_to_probabilities(tmp_path) -> None:
         1,
     ) == 100.0
     assert body["confidence_score"] == 0.69
+    assert body["expected_return_min_pct"] < body["expected_return_max_pct"]
+    assert body["downside_probability"] == body["sell_probability"]
+    assert body["similar_event_sample_count"] > 0
+    assert body["similar_event_win_rate"] > 0
     assert body["drivers"][0] == {
         "source_document_id": "src_bull",
         "stance": "bullish",

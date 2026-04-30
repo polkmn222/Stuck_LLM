@@ -3,7 +3,7 @@ backups
 .claude/settings.local.json
 .find-skills
 .local
-
+CODEXCODING
 # Project-specific Codex skills are shared with contributors.
 !.codex/
 !.codex/skills/
@@ -11,7 +11,7 @@ backups
 !.codex/skills/provider-credentials/**
 !.codex/skills/stock-analysis-llm/
 !.codex/skills/stock-analysis-llm/**
-
+API.md
 review-claude
 skills-lock.json
 skills
@@ -24,5 +24,6 @@ __pycache__
 .mypy_cache
 .venv
 coverage
+artifacts/harness/
 *.pyc
 *.tsbuildinfo

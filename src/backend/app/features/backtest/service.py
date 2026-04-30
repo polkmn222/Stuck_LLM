@@ -17,6 +17,9 @@ PRICE_BARS: Dict[BarKey, List[Dict[str, Any]]] = {
         {"timestamp": "2026-04-24T15:30:00+09:00", "close": 72000.0},
     ],
     ("US", "AAPL"): [
+        {"timestamp": "2026-04-01T16:00:00-04:00", "close": 190.0},
+        {"timestamp": "2026-04-10T16:00:00-04:00", "close": 198.5},
+        {"timestamp": "2026-04-17T16:00:00-04:00", "close": 202.0},
         {"timestamp": "2026-04-22T16:00:00-04:00", "close": 210.0},
         {"timestamp": "2026-04-23T16:00:00-04:00", "close": 205.0},
         {"timestamp": "2026-04-24T16:00:00-04:00", "close": 207.15},

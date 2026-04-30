@@ -5,7 +5,16 @@ from pydantic import BaseModel, Field, field_validator
 from app.features.settings.schemas import AnalysisMode, DefaultMarket
 from app.shared.validation import require_timezone_datetime
 
-SourceAdapter = Literal["reddit", "us_news", "polling_sentiment", "global_macro"]
+SourceAdapter = Literal[
+    "reddit",
+    "us_news",
+    "polling_sentiment",
+    "global_macro",
+    "naver_news",
+    "tavily_news",
+    "gnews_news",
+    "serpapi_google_news",
+]
 CollectionStatus = Literal["completed"]
 
 
@@ -15,7 +24,7 @@ class SourceCollectionCommand(BaseModel):
     stock_name: str = Field(min_length=1, max_length=160)
     as_of_at: str
     analysis_mode: AnalysisMode
-    source_adapters: List[SourceAdapter] = Field(min_length=1, max_length=4)
+    source_adapters: List[SourceAdapter] = Field(min_length=1, max_length=8)
 
     @field_validator("as_of_at")
     @classmethod

@@ -5,6 +5,19 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 
 
+def _clear_openai_environment(monkeypatch) -> None:
+    for name in [
+        "OPENAI_API_KEY",
+        "OpenAI_API_Key",
+        "OPENAI_MODEL",
+        "OPENAI_BASE_URL",
+        "CEREBRAS_API_KEY",
+        "CEREBRAS_MODEL",
+        "CEREBRAS_BASE_URL",
+    ]:
+        monkeypatch.delenv(name, raising=False)
+
+
 def test_korean_stock_typo_asks_for_confirmation_in_korean(tmp_path: Path) -> None:
     client = TestClient(create_app(state_path=tmp_path / "state.json"))
 
@@ -42,13 +55,19 @@ def test_follow_up_without_horizon_keeps_previous_stock_context(tmp_path: Path) 
 
     assert appended_response.status_code == 200
     body = appended_response.json()
-    assert body["missing_inputs"] == ["horizon"]
-    assert body["analysis_request"] is None
-    assert body["messages"][-1]["meta"] == "missing horizon"
-    assert "investment horizon" in body["messages"][-1]["content"]
+    assert body["status"] == "setup_needed"
+    assert body["missing_inputs"] == []
+    assert body["analysis_request"]["symbol"] == "005930"
+    assert body["analysis_request"]["horizon_type"] == "swing"
+    assert body["messages"][-1]["meta"] == "setup needed"
+    assert "API key" in body["messages"][-1]["content"]
 
 
-def test_horizon_follow_up_records_previous_stock_context(tmp_path: Path) -> None:
+def test_horizon_follow_up_records_previous_stock_context(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _clear_openai_environment(monkeypatch)
     client = TestClient(create_app(state_path=tmp_path / "state.json"))
 
     created_response = client.post(
@@ -64,15 +83,16 @@ def test_horizon_follow_up_records_previous_stock_context(tmp_path: Path) -> Non
 
     assert appended_response.status_code == 200
     body = appended_response.json()
-    assert body["status"] == "ready_for_analysis"
+    assert body["status"] == "setup_needed"
     assert body["missing_inputs"] == []
     assert body["analysis_request"]["symbol"] == "005930"
     assert body["analysis_request"]["horizon_type"] == "swing"
-    assert body["messages"][-1]["meta"] == "market snapshot recorded"
-    assert "LLM analysis is not connected yet" in body["messages"][-1]["content"]
+    assert body["messages"][-1]["meta"] == "setup needed"
+    assert "API key" in body["messages"][-1]["content"]
 
 
-def test_ready_reply_matches_korean_user_language(tmp_path: Path) -> None:
+def test_ready_reply_matches_korean_user_language(tmp_path: Path, monkeypatch) -> None:
+    _clear_openai_environment(monkeypatch)
     client = TestClient(create_app(state_path=tmp_path / "state.json"))
 
     response = client.post(
@@ -87,6 +107,6 @@ def test_ready_reply_matches_korean_user_language(tmp_path: Path) -> None:
 
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "ready_for_analysis"
-    assert body["messages"][1]["meta"] == "시장 스냅샷 기록"
-    assert "LLM 분석은 아직 연결되지 않았습니다" in body["messages"][1]["content"]
+    assert body["status"] == "setup_needed"
+    assert body["messages"][1]["meta"] == "설정 필요"
+    assert "API key" in body["messages"][1]["content"]

@@ -76,6 +76,9 @@ Record architecture decisions in `docs/plan.md` until a dedicated ADR folder exi
 - Use `provider-credentials` for BYOK provider setup, encrypted API-key storage, secret masking, credential deletion, and login-ready credential boundaries.
 - Use `stock-analysis-llm` for live stock-analysis LLM calls, strict `as_of_at` prompt construction, missing-credential responses, and provider/deterministic fallback separation.
 - Use `security-auditor` when LLM prompts include user content, URLs, source documents, credentials, or external provider calls.
+- Provider/API-key work must validate the real `/conversations` user path, not only Settings connection diagnostics.
+- Separate acceptance criteria for simple chat, follow-up chat in the same conversation, and stock-analysis requests.
+- A successful provider phase must prove repeated use across one conversation, with prior messages preserved and raw keys absent from responses, prompts, logs, and local state.
 
 ### Setup And Credentials
 
@@ -93,6 +96,8 @@ Record architecture decisions in `docs/plan.md` until a dedicated ADR folder exi
 - Use `apify-ultimate-scraper` when a supported platform actor is a better fit for social, trend, Reddit, brand-monitoring, or structured extraction tasks.
 - Use `security-auditor` before implementing URL ingestion, arbitrary fetches, crawler execution, SSRF-sensitive endpoints, or handling third-party page content.
 - Use `systematic-debugging` for blocked crawlers, inconsistent extraction, source timestamp errors, flaky browser automation, or API failures.
+- Keep LLM provider keys separate from search/news/market-data keys such as `SERPAPI_API_KEY`, `NAVER_CLIENT_ID`, `TAVILY_API_KEY`, and `GNEWS_API_KEY`.
+- When users expect a Google Finance-style result, expand the snapshot schema and UI for chart, key stats, news, and related data instead of stopping at the minimal `MarketQuote`.
 
 ### Historical Evidence And Scoring
 

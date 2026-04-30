@@ -18,6 +18,9 @@ class RuntimeConfig:
     api_key: Optional[str]
     credential_key: Optional[str]
     credential_key_path: Optional[Path]
+    allow_custom_provider: bool
+    allow_private_base_url: bool
+    provider_egress_allowlist: List[str]
 
 
 def _truthy(value: Optional[str]) -> bool:
@@ -29,6 +32,12 @@ def _csv_values(value: Optional[str]) -> List[str]:
         return DEFAULT_CORS_ORIGINS
     values = [item.strip() for item in value.split(",") if item.strip()]
     return values or DEFAULT_CORS_ORIGINS
+
+
+def _csv_list(value: Optional[str]) -> List[str]:
+    if value is None:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _non_empty(value: Optional[str]) -> Optional[str]:
@@ -48,5 +57,10 @@ def load_runtime_config() -> RuntimeConfig:
             Path(configured_path)
             if (configured_path := _non_empty(os.environ.get("STUCK_LLM_CREDENTIAL_KEY_PATH")))
             else None
+        ),
+        allow_custom_provider=_truthy(os.environ.get("STUCK_LLM_ALLOW_CUSTOM_PROVIDER")),
+        allow_private_base_url=_truthy(os.environ.get("STUCK_LLM_ALLOW_PRIVATE_BASE_URL")),
+        provider_egress_allowlist=_csv_list(
+            os.environ.get("STUCK_LLM_PROVIDER_EGRESS_ALLOWLIST")
         ),
     )
