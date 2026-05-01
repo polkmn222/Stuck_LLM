@@ -2,7 +2,7 @@
 
 ## Scope
 
-Use this workflow for all application code in future phases. The repository is currently in planning stage.
+Use this workflow for all application code and phase-level documentation changes.
 
 ## Expected Stack
 
@@ -13,9 +13,12 @@ Use this workflow for all application code in future phases. The repository is c
 
 ## Authoring Rules
 
-- Start each implementation with a `phase_00x` entry in `docs/task.md`.
-- Update `docs/implement.md` with concrete notes and validation results.
+- Start each implementation with a `phase_00x` entry in the compact task summary for the active 10-phase bucket.
+- Keep detailed task and implementation logs at `docs/task/task.md` and `docs/implement/implement.md`; open them only when the compact summaries are insufficient.
+- Update the matching range README title index when adding a new summary file.
 - Back up every modified non-backup file under `backups/<phase_id>/`.
+- Do not back up files already under `backups/`.
+- Write new Markdown content in English only.
 - Place backend code under `src/backend`.
 - Place frontend code under `src/frontend`.
 - Keep feature slices atomic:

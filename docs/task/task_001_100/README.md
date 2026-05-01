@@ -1,0 +1,108 @@
+# Task 001-100 Index
+
+Purpose
+- Help agents find the right task summary without opening `../task.md`.
+- Keep this range README as the phase title index for `phase_001` through `phase_100`.
+
+Rules
+- Open the 10-phase summary linked below before opening the detailed log.
+- Open `../task.md` only for exact acceptance criteria or full historical scope notes.
+- Keep this index in English only.
+- Preserve modified non-backup Markdown files under `backups/<phase_id>/` before editing them.
+
+Phase Title Index
+- `phase_001 - Planning And Workflow Documentation` -> `task_001_010.md`
+- `phase_002 - Skill Discovery Checklist And Index` -> `task_001_010.md`
+- `phase_003 - Skill Installation And Routing Policy` -> `task_001_010.md`
+- `phase_004 - Source Scaffold And Foundation Slice` -> `task_001_010.md`
+- `phase_005 - Unified Runner And Atomic Test Policy` -> `task_001_010.md`
+- `phase_006 - Chat Settings And Market Data MVP` -> `task_001_010.md`
+- `phase_007 - Historical Analysis Pipeline` -> `task_001_010.md`
+- `phase_008 - Scoring Probabilities And Confidence` -> `task_001_010.md`
+- `phase_009 - Backtest And PnL Graph Service` -> `task_001_010.md`
+- `phase_010 - Global Source Adapter MVP` -> `task_001_010.md`
+- `phase_011 - Hosted Readiness And Security Hardening` -> `task_011_020.md`
+- `phase_012 - Bilingual Theme UI Refresh` -> `task_011_020.md`
+- `phase_014 - Conversation Language And Follow-Up Context` -> `task_011_020.md`
+- `phase_015 - Typo Confirmation Rule And Runner Auto-Open` -> `task_011_020.md`
+- `phase_016 - Local BYOK Credential Backend And CLI Setup` -> `task_011_020.md`
+- `phase_017 - Settings Modal And Workspace Navigation` -> `task_011_020.md`
+- `phase_018 - Live LLM Provider Analysis Integration` -> `task_011_020.md`
+- `phase_019 - Live Market Data And Search Ingestion` -> `task_011_020.md`
+- `phase_020 - Review-Filtered Security, Concurrency, A11y, And CI Hardening` -> `task_011_020.md`
+- `phase_021 - OpenAI Provider Policy, DNS Safety, And Live Call Reliability` -> `task_021_030.md`
+- `phase_022 - US Market Data Provider With SerpApi Google Finance` -> `task_021_030.md`
+- `phase_023 - Evidence Source Quality And Audit Trail` -> `task_021_030.md`
+- `phase_024 - Cerebras OpenAI-Compatible Test Provider` -> `task_021_030.md`
+- `phase_025 - LLM Provider Connection Diagnostics` -> `task_021_030.md`
+- `phase_026 - Generative Chat Orchestration` -> `task_021_030.md`
+- `phase_027 - Settings-Language Response Policy` -> `task_021_030.md`
+- `phase_031 - Deterministic Analysis Eval Harness` -> `task_031_040.md`
+- `phase_032 - Source Safety Eval Rules` -> `task_031_040.md`
+- `phase_033 - Source Quality And Evidence Weighting Evals` -> `task_031_040.md`
+- `phase_034 - Prompt Grounding Contract Integration` -> `task_031_040.md`
+- `phase_035 - User-Selected LLM API Key Policy` -> `task_031_040.md`
+- `phase_036 - Minimal Quote Card In Chat` -> `task_031_040.md`
+- `phase_037 - Cerebras Provider Header Compatibility` -> `task_031_040.md`
+- `phase_038 - Persistent LLM Chat And Rich Ticker Snapshots` -> `task_031_040.md`
+- `phase_039 - ChatGPT-Style Conversation Workspace` -> `task_031_040.md`
+- `phase_040 - Agent Workflow Provider Validation Policy` -> `task_031_040.md`
+- `phase_041 - Agent Harness Foundation` -> `task_041_050.md`
+- `phase_046 - SerpApi Google Finance Query Candidate Fallback` -> `task_041_050.md`
+- `phase_047 - Nested Google Finance News Snapshot Parsing` -> `task_041_050.md`
+- `phase_048 - SerpApi Google News Ingestion Adapter` -> `task_041_050.md`
+- `phase_049 - Google Finance Runtime Comparison` -> `task_041_050.md`
+- `phase_050 - US Google Finance Chart Window Contract` -> `task_041_050.md`
+- `phase_051 - Frontend Chart Period Controls` -> `task_051_060.md`
+- `phase_052 - Conversation Deletion And Fixed Settings Rail` -> `task_051_060.md`
+- `phase_053 - LLM Confirmed Korean US Ticker Snapshot` -> `task_051_060.md`
+- `phase_054 - Chat Request Activity Indicator` -> `task_051_060.md`
+- `phase_055 - Ambiguous Chat Follow-Up And Snapshot Guard` -> `task_051_060.md`
+- `phase_056 - Search-Style US Ticker Normalization` -> `task_051_060.md`
+- `phase_057 - US Snapshot Currency Display Policy` -> `task_051_060.md`
+- `phase_058 - Google Finance Style Chart Context` -> `task_051_060.md`
+- `phase_059 - Readable Finance Chart And Fresh New Chat` -> `task_051_060.md`
+- `phase_060 - Chart Hover Tooltip And Thinner Directional Line` -> `task_051_060.md`
+- `phase_061 - Chat Auto Scroll To Latest` -> `task_061_070.md`
+- `phase_062 - S&P 500 Symbol Directory Routing` -> `task_061_070.md`
+- `phase_063 - Provider USD/KRW Conversion Rate` -> `task_061_070.md`
+- `phase_064 - News Digest Provider Contract` -> `task_061_070.md`
+- `phase_065 - News Query Ranking And Dedupe` -> `task_061_070.md`
+- `phase_066 - LLM News Summary Fallback` -> `task_061_070.md`
+- `phase_067 - Chat News Request Routing` -> `task_061_070.md`
+- `phase_068 - Chat News Digest UI` -> `task_061_070.md`
+- `phase_069 - News Digest Docs, Backups, And Validation` -> `task_061_070.md`
+- `phase_070 - Ruff And MyPy Install` -> `task_061_070.md`
+- `phase_071 - Joint Dev Server Shutdown` -> `task_071_080.md`
+- `phase_072 - News Query And Quote Page Demotion` -> `task_071_080.md`
+- `phase_073 - News Importance Categories` -> `task_071_080.md`
+- `phase_074 - LLM Korean News Metadata` -> `task_071_080.md`
+- `phase_075 - Korean News Digest Cards` -> `task_071_080.md`
+- `phase_076 - News Polish Docs, Backups, And Validation` -> `task_071_080.md`
+- `phase_077 - Five Trading Day Prediction Probabilities` -> `task_071_080.md`
+- `phase_078 - Market Data Evidence Bundle` -> `task_071_080.md`
+- `phase_079 - Expected Return And Downside Risk` -> `task_071_080.md`
+- `phase_080 - Historical Buy-Date PnL Chat` -> `task_071_080.md`
+- `phase_081 - Similar Event Calibration Baseline` -> `task_081_090.md`
+- `phase_082 - Prediction Docs, Backups, And Full Validation` -> `task_081_090.md`
+- `phase_083 - Typo And News Intent Recovery` -> `task_081_090.md`
+- `phase_084 - News Query Diversification` -> `task_081_090.md`
+- `phase_085 - Diverse News Selection` -> `task_081_090.md`
+- `phase_086 - Naver And Public Social News Sources` -> `task_081_090.md`
+- `phase_087 - Korean Prediction Intent Fallback` -> `task_081_090.md`
+- `phase_088 - News Source Validation, Docs, And Push Prep` -> `task_081_090.md`
+- `phase_089 - News Review Routing And Test Isolation` -> `task_081_090.md`
+- `phase_090 - US Mega-Cap Intent Matrix Regression` -> `task_081_090.md`
+- `phase_091 - Workflow Docs And Unit Test Policy Hardening` -> `task_091_100.md`
+- `phase_092 - S&P 500 Stock Universe Boundary` -> `task_091_100.md`
+- `phase_093 - News KV Cache And Processing Records` -> `task_091_100.md`
+- `phase_094 - S&P 500 Query Templates` -> `task_091_100.md`
+- `phase_095 - Prediction Artifact Store` -> `task_091_100.md`
+- `phase_096 - AI Capability And Prompt Inventory Diagnostics` -> `task_091_100.md`
+- `phase_097 - In-Flight Work Landing And Cache Surface` -> `task_091_100.md`
+- `phase_098 - Conversation Formatting Extraction` -> `task_091_100.md`
+- `phase_099 - Provider Warning Helper` -> `task_091_100.md`
+- `phase_100 - Split Local Cache Storage Domains` -> `task_091_100.md`
+
+Missing Detailed Entries
+- No task summary entries exist for `phase_013`, `phase_028` through `phase_030`, or `phase_042` through `phase_045`.

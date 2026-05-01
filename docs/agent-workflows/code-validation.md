@@ -8,7 +8,8 @@ Application code lives under `src/backend` and `src/frontend`.
 
 ```bash
 rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs
-wc -l AGENTS.md docs/*.md docs/agent-workflows/*.md
+wc -l AGENTS.md docs/**/*.md
+find docs/plan docs/task docs/implement -name '*_10[1-9].md' -o -name '*_20[1-9].md' -o -name '*_30[1-9].md'
 ```
 
 ## Harness Checks
@@ -63,7 +64,7 @@ cd src/frontend && npm audit --audit-level=high
 - Prediction/cache changes must test `as_of_at` cutoffs, evidence-hash reuse,
   prompt/model version cache misses, and absence of raw credentials or system
   prompt text in stored artifacts.
-- Record validation commands and results in `docs/implement.md`.
+- Record validation commands and results in the active compact implementation summary, and use `docs/implement/implement.md` only when full detailed history is required.
 - If a validation tool is not configured yet, state that clearly in the phase notes.
 - Do not mark a phase complete when known validation failures remain.
 - Provider/API-key phases must include a `/conversations` test that proves user-visible use of the saved key.

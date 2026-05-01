@@ -43,7 +43,7 @@
    -> Do not install external skills, scaffold app code, create services, or change runtime dependencies until the generated index is confirmed.
 
 15. Additional requests: preserve user-specific workflow requirements.
-   -> Keep phase naming as `phase_00x`, keep AGENTS.md lightweight, preserve docs/task.md and docs/implement.md conventions, and keep backups for modified files.
+   -> Keep phase naming as `phase_00x`, keep AGENTS.md lightweight, read compact docs before detailed logs, preserve `docs/task/task.md` and `docs/implement/implement.md`, and keep backups for modified non-backup files.
 
 16. Implementation workflow skills: include skills that help the project move from planning to implementation.
    -> Search for skills related to architecture, planning, task decomposition, TDD, systematic debugging, code review, API design, database design, migration planning, and validation.

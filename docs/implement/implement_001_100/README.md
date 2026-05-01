@@ -1,0 +1,108 @@
+# Implement 001-100 Index
+
+Purpose
+- Help agents find the right implementation summary without opening `../implement.md`.
+- Keep this range README as the phase title index for `phase_001` through `phase_100`.
+
+Rules
+- Open the 10-phase summary linked below before opening the detailed log.
+- Open `../implement.md` only for exact validation output or full historical notes.
+- Keep this index in English only.
+- Preserve modified non-backup Markdown files under `backups/<phase_id>/` before editing them.
+
+Phase Title Index
+- `phase_001 - Planning And Workflow Documentation` -> `implement_001_010.md`
+- `phase_002 - Skill Discovery Checklist And Index` -> `implement_001_010.md`
+- `phase_003 - Skill Installation And Routing Policy` -> `implement_001_010.md`
+- `phase_004 - Source Scaffold And Foundation Slice` -> `implement_001_010.md`
+- `phase_005 - Unified Runner And Atomic Test Policy` -> `implement_001_010.md`
+- `phase_006 - Chat Settings And Market Data MVP` -> `implement_001_010.md`
+- `phase_007 - Historical Analysis Pipeline` -> `implement_001_010.md`
+- `phase_008 - Scoring Probabilities And Confidence` -> `implement_001_010.md`
+- `phase_009 - Backtest And PnL Graph Service` -> `implement_001_010.md`
+- `phase_010 - Global Source Adapter MVP` -> `implement_001_010.md`
+- `phase_011 - Hosted Readiness And Security Hardening` -> `implement_011_020.md`
+- `phase_012 - Bilingual Theme UI Refresh` -> `implement_011_020.md`
+- `phase_014 - Conversation Language And Follow-Up Context` -> `implement_011_020.md`
+- `phase_015 - Typo Confirmation Rule And Runner Auto-Open` -> `implement_011_020.md`
+- `phase_016 - Local BYOK Credential Backend And CLI Setup` -> `implement_011_020.md`
+- `phase_017 - Settings Modal And Workspace Navigation` -> `implement_011_020.md`
+- `phase_018 - Live LLM Provider Analysis Integration` -> `implement_011_020.md`
+- `phase_019 - Live Market Data And Search Ingestion` -> `implement_011_020.md`
+- `phase_020 - Review-Filtered Security, Concurrency, A11y, And CI Hardening` -> `implement_011_020.md`
+- `phase_021 - OpenAI Provider Policy, DNS Safety, And Live Call Reliability` -> `implement_021_030.md`
+- `phase_022 - US Market Data Provider With SerpApi Google Finance` -> `implement_021_030.md`
+- `phase_023 - Evidence Source Quality And Audit Trail` -> `implement_021_030.md`
+- `phase_024 - Cerebras OpenAI-Compatible Test Provider` -> `implement_021_030.md`
+- `phase_025 - LLM Provider Connection Diagnostics` -> `implement_021_030.md`
+- `phase_026 - Generative Chat Orchestration` -> `implement_021_030.md`
+- `phase_027 - Settings-Language Response Policy` -> `implement_021_030.md`
+- `phase_031 - Deterministic Analysis Eval Harness` -> `implement_031_040.md`
+- `phase_032 - Source Safety Eval Rules` -> `implement_031_040.md`
+- `phase_033 - Source Quality And Evidence Weighting Evals` -> `implement_031_040.md`
+- `phase_034 - Prompt Grounding Contract Integration` -> `implement_031_040.md`
+- `phase_035 - User-Selected LLM API Key Policy` -> `implement_031_040.md`
+- `phase_036 - Minimal Quote Card In Chat` -> `implement_031_040.md`
+- `phase_037 - Cerebras Provider Header Compatibility` -> `implement_031_040.md`
+- `phase_038 - Persistent LLM Chat And Rich Ticker Snapshots` -> `implement_031_040.md`
+- `phase_039 - ChatGPT-Style Conversation Workspace` -> `implement_031_040.md`
+- `phase_040 - Agent Workflow Provider Validation Policy` -> `implement_031_040.md`
+- `phase_041 - Agent Harness Foundation` -> `implement_041_050.md`
+- `phase_046 - SerpApi Google Finance Query Candidate Fallback` -> `implement_041_050.md`
+- `phase_047 - Nested Google Finance News Snapshot Parsing` -> `implement_041_050.md`
+- `phase_048 - SerpApi Google News Ingestion Adapter` -> `implement_041_050.md`
+- `phase_049 - Google Finance Runtime Comparison` -> `implement_041_050.md`
+- `phase_050 - US Google Finance Chart Window Contract` -> `implement_041_050.md`
+- `phase_051 - Frontend Chart Period Controls` -> `implement_051_060.md`
+- `phase_052 - Conversation Deletion And Fixed Settings Rail` -> `implement_051_060.md`
+- `phase_053 - LLM Confirmed Korean US Ticker Snapshot` -> `implement_051_060.md`
+- `phase_054 - Chat Request Activity Indicator` -> `implement_051_060.md`
+- `phase_055 - Ambiguous Chat Follow-Up And Snapshot Guard` -> `implement_051_060.md`
+- `phase_056 - Search-Style US Ticker Normalization` -> `implement_051_060.md`
+- `phase_057 - US Snapshot Currency Display Policy` -> `implement_051_060.md`
+- `phase_058 - Google Finance Style Chart Context` -> `implement_051_060.md`
+- `phase_059 - Readable Finance Chart And Fresh New Chat` -> `implement_051_060.md`
+- `phase_060 - Chart Hover Tooltip And Thinner Directional Line` -> `implement_051_060.md`
+- `phase_061 - Chat Auto Scroll To Latest` -> `implement_061_070.md`
+- `phase_062 - S&P 500 Symbol Directory Routing` -> `implement_061_070.md`
+- `phase_063 - Provider USD/KRW Conversion Rate` -> `implement_061_070.md`
+- `phase_064 - News Digest Provider Contract` -> `implement_061_070.md`
+- `phase_065 - News Query Ranking And Dedupe` -> `implement_061_070.md`
+- `phase_066 - LLM News Summary Fallback` -> `implement_061_070.md`
+- `phase_067 - Chat News Request Routing` -> `implement_061_070.md`
+- `phase_068 - Chat News Digest UI` -> `implement_061_070.md`
+- `phase_069 - News Digest Docs, Backups, And Validation` -> `implement_061_070.md`
+- `phase_070 - Ruff And MyPy Install` -> `implement_061_070.md`
+- `phase_071 - Joint Dev Server Shutdown` -> `implement_071_080.md`
+- `phase_072 - News Query And Quote Page Demotion` -> `implement_071_080.md`
+- `phase_073 - News Importance Categories` -> `implement_071_080.md`
+- `phase_074 - LLM Korean News Metadata` -> `implement_071_080.md`
+- `phase_075 - Korean News Digest Cards` -> `implement_071_080.md`
+- `phase_076 - News Polish Docs, Backups, And Validation` -> `implement_071_080.md`
+- `phase_077 - Five Trading Day Prediction Probabilities` -> `implement_071_080.md`
+- `phase_078 - Market Data Evidence Bundle` -> `implement_071_080.md`
+- `phase_079 - Expected Return And Downside Risk` -> `implement_071_080.md`
+- `phase_080 - Historical Buy-Date PnL Chat` -> `implement_071_080.md`
+- `phase_081 - Similar Event Calibration Baseline` -> `implement_081_090.md`
+- `phase_082 - Prediction Docs, Backups, And Full Validation` -> `implement_081_090.md`
+- `phase_083 - Typo And News Intent Recovery` -> `implement_081_090.md`
+- `phase_084 - News Query Diversification` -> `implement_081_090.md`
+- `phase_085 - Diverse News Selection` -> `implement_081_090.md`
+- `phase_086 - Naver And Public Social News Sources` -> `implement_081_090.md`
+- `phase_087 - Korean Prediction Intent Fallback` -> `implement_081_090.md`
+- `phase_088 - News Source Validation, Docs, And Push Prep` -> `implement_081_090.md`
+- `phase_089 - News Review Routing And Test Isolation` -> `implement_081_090.md`
+- `phase_090 - US Mega-Cap Intent Matrix Regression` -> `implement_081_090.md`
+- `phase_091 - Workflow Docs And Unit Test Policy Hardening` -> `implement_091_100.md`
+- `phase_092 - S&P 500 Stock Universe Boundary` -> `implement_091_100.md`
+- `phase_093 - News KV Cache And Processing Records` -> `implement_091_100.md`
+- `phase_094 - S&P 500 Query Templates` -> `implement_091_100.md`
+- `phase_095 - Prediction Artifact Store` -> `implement_091_100.md`
+- `phase_096 - AI Capability And Prompt Inventory Diagnostics` -> `implement_091_100.md`
+- `phase_097 - In-Flight Work Landing And Cache Surface` -> `implement_091_100.md`
+- `phase_098 - Conversation Formatting Extraction` -> `implement_091_100.md`
+- `phase_099 - Provider Warning Helper` -> `implement_091_100.md`
+- `phase_100 - Split Local Cache Storage Domains` -> `implement_091_100.md`
+
+Missing Detailed Entries
+- No implementation summary entries exist for `phase_013`, `phase_028` through `phase_030`, or `phase_042` through `phase_045`.

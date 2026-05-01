@@ -2,8 +2,9 @@
 
 ## Project Status
 - Planning-stage repository for a conversational stock-analysis AI agent.
-- See `docs/plan.md` for product scope, architecture, phases, and data model.
-- See `docs/task.md` and `docs/implement.md` before changing implementation scope.
+- Read compact docs first: `docs/plan/README.md`, `docs/task/README.md`, and `docs/implement/README.md`.
+- Open `docs/plan/plan.md`, `docs/task/task.md`, and `docs/implement/implement.md` only when compact summaries are insufficient.
+- Current docs use 100-phase folders with 10-phase summary files, for example `docs/implement/implement_101_200/implement_101_110.md`.
 
 ## Package Manager
 - Backend: Python/FastAPI under `src/backend`.
@@ -16,7 +17,7 @@
 | Task | Command |
 |------|---------|
 | Find placeholders | `rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs` |
-| Markdown size check | `wc -l AGENTS.md docs/*.md docs/agent-workflows/*.md` |
+| Markdown size check | `wc -l AGENTS.md docs/**/*.md` |
 | Harness quick validation | `./run-harness.sh --profile quick` |
 | Backend test | `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` |
 | Frontend unit test | `cd src/frontend && npm test` |
@@ -26,8 +27,12 @@
 
 ## Key Conventions
 - Use phase IDs as `phase_001`, `phase_002`, and so on.
-- Keep `docs/task.md` and `docs/implement.md` in reverse chronological order, newest phase first.
+- Keep detailed logs at `docs/plan/plan.md`, `docs/task/task.md`, and `docs/implement/implement.md`.
+- Keep compact summaries in 100-phase folders and 10-phase files such as `task_101_110.md`.
+- Update the matching range README phase-title index when adding a summary file.
 - Back up every non-backup file modified in a phase under `backups/<phase_id>/`.
+- Do not back up files already under `backups/`.
+- Write new Markdown content in English only.
 - Keep analysis data and later PnL/backtest data separated.
 - Do not mix post-`as_of_at` evidence into historical LLM analysis.
 - Non-destructive installs, setup, and validation commands may run without extra user confirmation.

@@ -4,15 +4,20 @@
 
 - Use one active phase at a time.
 - Name phases as `phase_001`, `phase_002`, and so on.
-- Keep `docs/task.md` and `docs/implement.md` newest-first.
+- Read compact docs first: `docs/plan/README.md`, `docs/task/README.md`, and `docs/implement/README.md`.
+- Keep detailed logs at `docs/plan/plan.md`, `docs/task/task.md`, and `docs/implement/implement.md`.
+- Keep compact summaries in 100-phase folders with full 10-phase filenames, such as `task_101_110.md`.
+- Update the matching range README title index when adding or renaming a summary file.
 - Create backups under `backups/<phase_id>/` for modified non-backup files.
+- Do not back up files already under `backups/`.
+- Write new Markdown content in English only.
 
 ## Recommended Execution Order
 
-1. Update `docs/task.md` with the phase goal and acceptance criteria.
+1. Update the active compact task summary with the phase goal and acceptance criteria.
 2. Inspect the relevant files and existing docs.
 3. Implement the smallest coherent slice.
-4. Update `docs/implement.md` with decisions and validation.
+4. Update the active compact implementation summary with decisions and validation.
 5. Copy modified non-backup files to `backups/<phase_id>/`.
 6. Run validation and fix failures.
 7. Summarize changed files, validation, and residual risks.
@@ -29,7 +34,7 @@
 
 ## Decision Logging
 
-Record architecture decisions in `docs/plan.md` until a dedicated ADR folder exists. Use ADR files once the implementation introduces irreversible choices such as database migration tooling, auth provider, or deployment platform.
+Record architecture decisions in the active compact plan summary first. Use `docs/plan/plan.md` only when a decision needs full historical wording. Use ADR files once the implementation introduces irreversible choices such as database migration tooling, auth provider, or deployment platform.
 
 ## Permission Policy
 
@@ -42,7 +47,8 @@ Record architecture decisions in `docs/plan.md` until a dedicated ADR folder exi
 - Keep docs aligned with code and policy changes.
 - If the current user request already includes the needed docs change, update docs directly.
 - If a code or policy change implies additional docs updates outside the current request, ask before editing those docs.
-- Update `docs/task.md` and `docs/implement.md` for every phase-level implementation, installation, workflow, or policy change.
+- Update the active task and implementation summaries for every phase-level implementation, installation, workflow, or policy change.
+- Use `docs/task/task.md` and `docs/implement/implement.md` only when the detailed source logs must be extended.
 - Back up every modified non-backup file under `backups/<phase_id>/`.
 
 ## Skill Routing By Situation
@@ -120,7 +126,7 @@ Record architecture decisions in `docs/plan.md` until a dedicated ADR folder exi
 - Review external repositories for portable patterns before copying code.
 - Do not import dependency policy, secret storage policy, or framework structure
   from an external repo unless it matches this project.
-- Record adopted patterns in `docs/plan.md` or `docs/implement.md`, and add
+- Record adopted patterns in the active compact plan or implementation summary, and add
   unit tests before relying on them in conversation, news, market-data, or LLM paths.
 
 ### Backtesting, PnL, And Quant Analytics
