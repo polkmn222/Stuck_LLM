@@ -27,3 +27,8 @@ coverage
 artifacts/harness/
 *.pyc
 *.tsbuildinfo
+cerebras-test
+gpt-coding
+.DS_Store
+review-gemini
+review-gpt

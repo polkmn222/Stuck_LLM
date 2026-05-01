@@ -97,6 +97,11 @@ def _request_query_from_url(url: str) -> str:
     return query_items.get("q", query_items.get("query", [""]))[0]
 
 
+def _clear_optional_news_provider_environment(monkeypatch) -> None:
+    for name in ("NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _tavily_results_for_query(query: str) -> List[Dict[str, Any]]:
     lower_query = query.lower()
     if "product launch" in lower_query or "ai strategy" in lower_query:
@@ -254,6 +259,7 @@ def test_news_digest_collects_providers_dedupes_and_tracks_transparency(
 ) -> None:
     from app.features.news_digest import service as news_digest_service
 
+    _clear_optional_news_provider_environment(monkeypatch)
     monkeypatch.setenv("TAVILY_API_KEY", "tavily-phase064")
     monkeypatch.setenv("GNEWS_API_KEY", "gnews-phase064")
     monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-phase064")
@@ -291,7 +297,7 @@ def test_news_digest_collects_providers_dedupes_and_tracks_transparency(
     assert any(article.provider == "tavily_news" for article in digest.important_articles)
     assert any("product launch service AI strategy" in article.query for article in all_articles)
     assert any("CEO leadership executive succession" in article.query for article in all_articles)
-    assert any("regulation lawsuit antitrust App Store controversy" in article.query for article in all_articles)
+    assert any("regulation lawsuit antitrust controversy" in article.query for article in all_articles)
     assert any("site:spglobal.com/market-intelligence" in article.query for article in all_articles)
     assert "최신 뉴스" in digest.summary
 
@@ -372,7 +378,7 @@ def test_news_digest_builds_diversified_us_company_event_queries() -> None:
     assert queries[0] == APPLE_NEWS_QUERY
     assert any("product launch service AI strategy" in query for query in queries)
     assert any("CEO leadership executive succession" in query for query in queries)
-    assert any("regulation lawsuit antitrust App Store controversy" in query for query in queries)
+    assert any("regulation lawsuit antitrust controversy" in query for query in queries)
     assert any("analyst target valuation" in query for query in queries)
     assert any("site:spglobal.com/market-intelligence" in query for query in queries)
     assert len(set(queries)) == len(queries)
@@ -524,6 +530,7 @@ def test_korean_news_request_returns_digest_without_horizon_and_uses_llm_summary
 ) -> None:
     from app.features.news_digest import service as news_digest_service
 
+    _clear_optional_news_provider_environment(monkeypatch)
     monkeypatch.setenv("TAVILY_API_KEY", "tavily-phase067")
     monkeypatch.setenv("GNEWS_API_KEY", "gnews-phase067")
     monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-phase067")
@@ -572,6 +579,7 @@ def test_korean_news_typo_routes_to_news_digest_without_llm_intent(
 ) -> None:
     from app.features.news_digest import service as news_digest_service
 
+    _clear_optional_news_provider_environment(monkeypatch)
     monkeypatch.setenv("TAVILY_API_KEY", "tavily-phase083")
     monkeypatch.setenv("GNEWS_API_KEY", "gnews-phase083")
     monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-phase083")
@@ -605,12 +613,86 @@ def test_korean_news_typo_routes_to_news_digest_without_llm_intent(
     assert body["messages"][-1]["news_digest"]["important_articles"]
 
 
+def test_korean_social_reaction_request_routes_to_news_digest_without_llm_intent(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from app.features.news_digest import service as news_digest_service
+
+    def fake_fetch_json(
+        url: str,
+        *,
+        headers: Optional[Dict[str, str]] = None,
+        payload: Optional[Dict[str, Any]] = None,
+        timeout_seconds: int = 10,
+    ) -> Dict[str, Any]:
+        if "engine=google" in url:
+            query = _request_query_from_url(url)
+            if "site:x.com" in query or "site:twitter.com" in query:
+                return {
+                    "organic_results": [
+                        {
+                            "title": "Public X posts discuss Apple AI strategy",
+                            "link": "https://x.com/example/status/789",
+                            "source": "X",
+                            "date": "Apr 29, 2026",
+                            "snippet": "Public posts discuss Apple AI strategy and policy pressure.",
+                        }
+                    ]
+                }
+        return _news_payload_for_url(
+            url,
+            headers=headers,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+
+    _clear_optional_news_provider_environment(monkeypatch)
+    monkeypatch.setenv("TAVILY_API_KEY", "tavily-phase089")
+    monkeypatch.setenv("GNEWS_API_KEY", "gnews-phase089")
+    monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-phase089")
+    monkeypatch.setattr(news_digest_service, "_fetch_json", fake_fetch_json)
+    monkeypatch.setattr(
+        market_data_service,
+        "_quote_from_serpapi_google_finance",
+        lambda symbol, window="1D": _apple_quote() if symbol == "AAPL" else None,
+        raising=False,
+    )
+
+    client = TestClient(create_app(state_path=tmp_path / "state.json"))
+
+    response = client.post(
+        "/conversations",
+        json={
+            "content": "애플 SNS 반응",
+            "market": "KR",
+            "analysis_mode": "quick",
+            "response_language": "ko",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    provider_runs = body["news_digest"]["provider_runs"]
+    all_articles = (
+        body["news_digest"]["important_articles"] + body["news_digest"]["additional_articles"]
+    )
+
+    assert body["status"] == "news_digest"
+    assert body["missing_inputs"] == []
+    assert body["analysis_request"] is None
+    assert any(run["provider"] == "serpapi_social_web" for run in provider_runs)
+    assert any(article["source_domain"] == "x.com" for article in all_articles)
+    assert body["messages"][-1]["meta"] == "뉴스 요약"
+
+
 def test_llm_news_json_updates_korean_article_headlines(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
     from app.features.news_digest import service as news_digest_service
 
+    _clear_optional_news_provider_environment(monkeypatch)
     captured_digest_ids: List[str] = []
 
     def fake_fetch_json(

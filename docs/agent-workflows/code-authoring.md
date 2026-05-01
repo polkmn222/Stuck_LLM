@@ -22,10 +22,15 @@ Use this workflow for all application code in future phases. The repository is c
   - Backend: `src/backend/app/features/<feature>/`.
   - Frontend: `src/frontend/src/features/<feature>/`.
 - Every feature or behavior change must include unit tests in the same phase.
+- Conversation, market-data, news, and prediction changes must include matrix-style
+  unit tests across representative symbols, intents, and Korean/English routing
+  where behavior depends on text classification.
 - Do not add cross-feature helpers until at least two feature slices need the same behavior.
 - Shared code must live in an explicit `shared/` folder and must have its own tests.
 - Keep historical evidence analysis separate from future PnL/backtest data.
 - Enforce `analysis_requests.as_of_at` before LLM prompts or scoring.
+- Cache and processing records must be keyed by `symbol`, `intent` or provider
+  operation, `as_of_at` where relevant, provider/model, and prompt/cache version.
 - Prefer adapters for external sources instead of embedding source-specific logic in analysis code.
 - Keep provider logic behind explicit OpenAI, Anthropic, and Gemini interfaces.
 
@@ -53,6 +58,18 @@ Use this workflow for all application code in future phases. The repository is c
 - Report failed sources in user-facing analysis results.
 - For market snapshots, model chart bars, key stats, and news explicitly when the provider returns them.
 - Do not use LLM credential storage for search/news/market-data keys.
+- Provider-response caches may store normalized payloads and provider status, but
+  must never store API keys, decrypted credentials, hidden system prompts, or
+  user secrets.
+
+## Stock Universe Rules
+
+- S&P 500 company metadata must resolve through a single market-data universe boundary.
+- News requests may use metadata-only S&P 500 records when live quote data is
+  unavailable, but chart and prediction paths still require real or fixture market data.
+- Query-template changes for US stocks must include Apple, Google/Alphabet,
+  Nvidia, Tesla, and representative sector tests such as financials, energy,
+  health care, consumer, and retail.
 
 ## LLM Rules
 
@@ -62,3 +79,6 @@ Use this workflow for all application code in future phases. The repository is c
 - Model/provider selection belongs in settings and per-message metadata.
 - Generic chat, follow-up chat, and stock-analysis prompts are separate behaviors with separate tests.
 - A saved LLM API key is not complete until `/conversations` can use it for repeated user-visible replies.
+- Prediction artifacts may be reused only when evidence hash, prompt version,
+  provider, model, horizon, and `as_of_at` match. Prompt/model version changes
+  must force a cache miss.

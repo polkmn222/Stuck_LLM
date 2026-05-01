@@ -1,5 +1,6 @@
 import json
 import re
+from hashlib import sha256
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, cast
 from uuid import uuid4
@@ -27,6 +28,12 @@ from app.features.analysis.schemas import (
     SourceDocumentInput,
 )
 from app.features.credentials.service import get_llm_credential_secret
+from app.features.processing_cache.service import (
+    evidence_set_hash,
+    get_prediction_artifact,
+    prediction_artifact_key,
+    store_prediction_artifact,
+)
 from app.shared.credential_crypto import CredentialCipher
 from app.shared.state_store import LocalStateStore, State
 
@@ -40,6 +47,7 @@ UNTRUSTED_SOURCE_CLOSE = "</UNTRUSTED_SOURCE_DOCUMENT>"
 LIVE_MAX_SOURCE_DOCUMENTS = 20
 LIVE_MAX_SOURCE_EXCERPT_CHARS = 800
 LIVE_MAX_PROMPT_CONTEXT_CHARS = 12000
+LIVE_ANALYSIS_PROMPT_VERSION = "phase_095_live_analysis_v1"
 
 BULLISH_TERMS = (
     "stronger",
@@ -98,6 +106,24 @@ def _escaped_prompt_json(value: Dict[str, Any]) -> str:
     )
 
 
+def _source_document_id(document: SourceDocumentInput, index: int) -> str:
+    payload = {
+        "index": index,
+        "source_type": document.source_type,
+        "source_name": document.source_name,
+        "url": document.url,
+        "title": document.title,
+        "published_at": document.published_at,
+        "content_text": document.content_text,
+        "language": document.language,
+        "adapter": document.adapter,
+        "relevance_score": document.relevance_score,
+        "safety_flags": document.safety_flags,
+    }
+    encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True)
+    return f"src_{sha256(encoded.encode('utf-8')).hexdigest()[:20]}"
+
+
 def _stance_for(document: SourceDocumentInput) -> Tuple[EvidenceStance, float]:
     haystack = f"{document.title} {document.content_text}".lower()
     bullish_hits = sum(1 for term in BULLISH_TERMS if term in haystack)
@@ -117,13 +143,13 @@ def _document_decisions(
     cutoff = _parse_datetime(as_of_at)
     decisions: List[SourceDocumentDecision] = []
 
-    for document in documents:
+    for index, document in enumerate(documents):
         published_at = _parse_datetime(document.published_at)
         included = published_at <= cutoff
         decisions.append(
             SourceDocumentDecision(
                 **_model_dump(document),
-                id=f"src_{uuid4().hex}",
+                id=_source_document_id(document, index),
                 included_in_analysis=included,
                 exclusion_reason=None if included else "published_after_as_of_at",
             )
@@ -487,6 +513,48 @@ def create_live_analysis(
             prompt_context,
         )
 
+    current_evidence_hash = evidence_set_hash(included_documents)
+    artifact_key = prediction_artifact_key(
+        market=command.market,
+        symbol=command.symbol,
+        horizon_type=command.horizon_type,
+        analysis_mode=command.analysis_mode,
+        as_of_at=command.as_of_at,
+        provider=provider_config.provider,
+        model=provider_config.model,
+        base_url=provider_config.base_url,
+        prompt_version=LIVE_ANALYSIS_PROMPT_VERSION,
+        evidence_hash=current_evidence_hash,
+    )
+    cached_artifact = get_prediction_artifact(store, artifact_key)
+    if cached_artifact is not None:
+        cached_items = cached_artifact.get("evidence_items")
+        evidence_items = (
+            [
+                EvidenceItem(**item)
+                for item in cached_items
+                if isinstance(item, dict)
+            ]
+            if isinstance(cached_items, list)
+            else []
+        )
+        response = _base_analysis_response(
+            command=command,
+            decisions=decisions,
+            evidence_items=evidence_items,
+            summary=str(cached_artifact.get("summary") or ""),
+            status="completed",
+            prompt_documents=included_documents,
+            provider=provider_config.provider,
+            model=provider_config.model,
+        )
+        return _store_analysis_response(
+            store,
+            response,
+            LIVE_SYSTEM_INSTRUCTIONS,
+            prompt_context,
+        )
+
     try:
         messages = build_live_analysis_messages(
             command,
@@ -506,6 +574,19 @@ def create_live_analysis(
             )
         )
         evidence_items = _live_evidence_items(live_output, included_documents)
+        store_prediction_artifact(
+            store,
+            artifact_key,
+            market=command.market,
+            symbol=command.symbol,
+            as_of_at=command.as_of_at,
+            provider=provider_config.provider,
+            model=provider_config.model,
+            prompt_version=LIVE_ANALYSIS_PROMPT_VERSION,
+            evidence_hash=current_evidence_hash,
+            summary=live_output.summary,
+            evidence_items=[_model_dump(item) for item in evidence_items],
+        )
         response = _base_analysis_response(
             command=command,
             decisions=decisions,

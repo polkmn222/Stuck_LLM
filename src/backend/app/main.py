@@ -11,6 +11,7 @@ from app.features.analysis.live_provider import (
     OpenAiCompatibleAnalysisProvider,
     ProviderNetworkPolicy,
 )
+from app.features.ai_capabilities.router import router as ai_capabilities_router
 from app.features.analysis.router import router as analysis_router
 from app.features.backtest.router import router as backtest_router
 from app.features.conversations.router import router as conversations_router
@@ -18,6 +19,7 @@ from app.features.credentials.router import router as credentials_router
 from app.features.health.router import router as health_router
 from app.features.ingestion.router import router as ingestion_router
 from app.features.market_data.router import router as market_data_router
+from app.features.processing_cache.router import router as processing_cache_router
 from app.features.scoring.router import router as scoring_router
 from app.features.settings.router import router as settings_router
 from app.shared.runtime_config import RuntimeConfig, load_runtime_config
@@ -86,6 +88,7 @@ def create_app(
         return await call_next(request)
 
     app.include_router(health_router)
+    app.include_router(ai_capabilities_router)
     app.include_router(settings_router)
     app.include_router(credentials_router)
     app.include_router(conversations_router)
@@ -94,6 +97,7 @@ def create_app(
     app.include_router(scoring_router)
     app.include_router(backtest_router)
     app.include_router(ingestion_router)
+    app.include_router(processing_cache_router)
     return app
 
 

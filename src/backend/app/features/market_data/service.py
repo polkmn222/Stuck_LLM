@@ -2,17 +2,17 @@ import importlib
 import csv
 import json
 import math
-import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
+from app.features.credentials.external_providers import get_external_provider_credential
 from app.features.market_data.schemas import (
     MarketBar,
     MarketChartWindow,
@@ -38,6 +38,8 @@ class QuoteConfirmationCandidate:
 class Sp500Company:
     symbol: str
     security: str
+    sector: str
+    sub_industry: str
     aliases: Tuple[str, ...]
 
 
@@ -252,6 +254,8 @@ def _sp500_companies() -> Tuple[Sp500Company, ...]:
                 Sp500Company(
                     symbol=symbol,
                     security=security,
+                    sector=_clean_market_text(row.get("GICS Sector")),
+                    sub_industry=_clean_market_text(row.get("GICS Sub-Industry")),
                     aliases=_sp500_aliases_for(symbol, security),
                 )
             )
@@ -261,6 +265,18 @@ def _sp500_companies() -> Tuple[Sp500Company, ...]:
 @lru_cache(maxsize=1)
 def _sp500_symbol_set() -> frozenset[str]:
     return frozenset(company.symbol for company in _sp500_companies())
+
+
+def list_sp500_companies() -> Tuple[Sp500Company, ...]:
+    return _sp500_companies()
+
+
+def get_sp500_company(symbol: str) -> Optional[Sp500Company]:
+    symbol_key = normalize_symbol(symbol).replace("/", ".")
+    return next(
+        (company for company in _sp500_companies() if company.symbol == symbol_key),
+        None,
+    )
 
 
 def _sp500_alias_matches(company: Sp500Company, lowered_text: str, normalized_text: str) -> Optional[str]:
@@ -280,6 +296,35 @@ def _resolve_sp500_quote_from_text(text: str, normalized_text: str) -> Optional[
         if _sp500_alias_matches(company, lowered_text, normalized_text) is None:
             continue
         return get_quote("US", company.symbol)
+    return None
+
+
+def _directory_as_of_at() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def sp500_metadata_quote(symbol: str) -> Optional[MarketQuote]:
+    company = get_sp500_company(symbol)
+    if company is None:
+        return None
+    return MarketQuote(
+        market="US",
+        symbol=company.symbol,
+        name=company.security,
+        exchange=_google_finance_exchange(company.symbol),
+        currency="USD",
+        last_price=0.0,
+        as_of_at=_directory_as_of_at(),
+        source="sp500_directory_metadata",
+    )
+
+
+def resolve_sp500_metadata_quote_from_text(text: str) -> Optional[MarketQuote]:
+    lowered_text = text.lower()
+    normalized_text = _normalize_lookup_text(text)
+    for company in _sp500_companies():
+        if _sp500_alias_matches(company, lowered_text, normalized_text) is not None:
+            return sp500_metadata_quote(company.symbol)
     return None
 
 
@@ -400,8 +445,8 @@ def _read_finance_data(symbol: str, start_date: str, end_date: str) -> Any:
 
 
 def _serpapi_api_key() -> Optional[str]:
-    api_key = os.environ.get("SERPAPI_API_KEY", "").strip()
-    return api_key or None
+    credential = get_external_provider_credential("serpapi")
+    return credential.api_key if credential is not None else None
 
 
 def _google_finance_exchange(symbol: str) -> str:
@@ -436,6 +481,10 @@ def _serpapi_google_finance_queries(symbol: str) -> List[str]:
         add_candidate(f"{symbol_key}:{exchange}")
     add_candidate(symbol_key)
     return candidates
+
+
+def google_finance_query_candidates(symbol: str) -> Tuple[str, ...]:
+    return tuple(_serpapi_google_finance_queries(symbol))
 
 
 def _search_serpapi_google_finance(

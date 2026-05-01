@@ -98,6 +98,19 @@ analysis_results(id, analysis_request_id, buy_probability, hold_probability, sel
 evidence_items(id, analysis_result_id, source_document_id, stance, weight, summary, quote_excerpt)
 ```
 
+Processing, cache, and replay entities:
+
+```text
+kv_cache(id, namespace, cache_key, payload_json, created_at, expires_at)
+news_processing_runs(id, digest_id, stock_id, generated_at, cache_hits, cache_misses, provider_runs_json, query_templates_json)
+prediction_artifacts(id, artifact_key, stock_id, as_of_at, horizon_type, evidence_set_hash, prompt_version, model_provider, model_name, summary, evidence_items_json, created_at)
+ai_prompt_inventory(id, prompt_key, version, owner_feature, purpose, created_at)
+```
+
+KV cache entries are disposable acceleration data. Processing runs and prediction
+artifacts are audit and replay data and must never store raw provider secrets,
+decrypted credentials, hidden system prompts, or post-cutoff evidence.
+
 Market data and PnL:
 
 ```text
@@ -168,8 +181,32 @@ Skill discovery index:
 
 - `.find-skills/stock-analysis-agent/index.md`
 
+## External AI Assistant Pattern Audit
+
+The WealthOS local repository was reviewed for portable AI assistant patterns.
+Adopted ideas are capability matrices, prompt inventory, boolean-only provider
+status, data-grounded prompt rules, and provider-response cache/inflight thinking.
+Not adopted are framework-specific Next.js routes, committed `.env.local` secret
+policy, and blanket no-forecast prompts that conflict with this project's
+prediction mode.
+
 ## Planned Build Phases
 
+- `phase_103`: Chat news digest component extraction from `ChatShell` with standalone frontend coverage.
+- `phase_102`: Backend E2E chat-to-prediction-analysis test slice for `/conversations` persistence and scoring.
+- `phase_101`: Centralized environment-backed external provider credential boundary for search/news/market-data keys.
+- `phase_100`: Local state sidecar split for KV cache, news processing runs, and prediction artifacts.
+- `phase_099`: Shared provider status warning helper for ingestion and news digest flows.
+- `phase_098`: Conversation formatting helper extraction as the first `conversations/service.py` decomposition slice.
+- `phase_097`: Land in-flight AI capability and processing-cache work with minimal cache status/invalidation API and review-folder gitignore cleanup.
+- `phase_096`: AI capability matrix and prompt inventory diagnostics route inspired by the WealthOS assistant audit.
+- `phase_095`: Prediction artifact store keyed by evidence hash, prompt version, provider, model, horizon, and `as_of_at`.
+- `phase_094`: S&P 500 symbol and sector-aware query templates for company news.
+- `phase_093`: DB-backed KV cache and news processing run records using the local state-store DB boundary.
+- `phase_092`: S&P 500 stock-universe repository boundary and metadata-only news fallback.
+- `phase_091`: Agent workflow docs hardening for external repo audits, matrix unit tests, cache policy, and processing DB rules.
+- `phase_090`: Backend regression matrix for Apple, Google, Nvidia, and Tesla news, chart, and prediction requests.
+- `phase_089`: Review fixes for social-only news routing and environment-isolated news provider tests.
 - `phase_088`: News source validation, documentation, backups, and push preparation.
 - `phase_087`: Korean prediction intent fallback so `애플 예측` routes to live analysis without relying on LLM intent classification.
 - `phase_086`: Optional Naver News and public social-search providers for news digest coverage.

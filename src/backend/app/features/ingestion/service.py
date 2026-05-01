@@ -1,6 +1,5 @@
 import html
 import json
-import os
 import re
 import urllib.parse
 import urllib.request
@@ -11,12 +10,17 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
+from app.features.credentials.external_providers import (
+    get_external_provider_credential,
+    get_naver_search_credential,
+)
 from app.features.ingestion.schemas import (
     CollectedSourceDocument,
     SourceAdapter,
     SourceCollectionCommand,
     SourceCollectionResponse,
 )
+from app.shared.provider_status import record_provider_warning
 from app.shared.state_store import LocalStateStore, State
 
 DocumentSeed = Dict[str, Any]
@@ -262,9 +266,8 @@ def _external_document(
 
 
 def _collect_naver_news(command: SourceCollectionCommand) -> List[CollectedSourceDocument]:
-    client_id = os.environ.get("NAVER_CLIENT_ID")
-    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
-    if not client_id or not client_secret:
+    credential = get_naver_search_credential()
+    if credential is None:
         raise MissingSourceCredentialError
 
     limit = _document_limit(command.analysis_mode)
@@ -278,8 +281,8 @@ def _collect_naver_news(command: SourceCollectionCommand) -> List[CollectedSourc
     payload = _fetch_json(
         f"https://openapi.naver.com/v1/search/news.json?{query}",
         headers={
-            "X-Naver-Client-Id": client_id,
-            "X-Naver-Client-Secret": client_secret,
+            "X-Naver-Client-Id": credential.client_id,
+            "X-Naver-Client-Secret": credential.client_secret,
         },
     )
     documents: List[CollectedSourceDocument] = []
@@ -308,15 +311,15 @@ def _collect_naver_news(command: SourceCollectionCommand) -> List[CollectedSourc
 
 
 def _collect_tavily_news(command: SourceCollectionCommand) -> List[CollectedSourceDocument]:
-    api_key = os.environ.get("TAVILY_API_KEY")
-    if not api_key:
+    credential = get_external_provider_credential("tavily")
+    if credential is None:
         raise MissingSourceCredentialError
 
     limit = _document_limit(command.analysis_mode)
     payload = _fetch_json(
         "https://api.tavily.com/search",
         payload={
-            "api_key": api_key,
+            "api_key": credential.api_key,
             "query": _source_query(command),
             "search_depth": "basic",
             "max_results": limit,
@@ -350,8 +353,8 @@ def _collect_tavily_news(command: SourceCollectionCommand) -> List[CollectedSour
 
 
 def _collect_gnews_news(command: SourceCollectionCommand) -> List[CollectedSourceDocument]:
-    api_key = os.environ.get("GNEWS_API_KEY")
-    if not api_key:
+    credential = get_external_provider_credential("gnews")
+    if credential is None:
         raise MissingSourceCredentialError
 
     limit = _document_limit(command.analysis_mode)
@@ -360,7 +363,7 @@ def _collect_gnews_news(command: SourceCollectionCommand) -> List[CollectedSourc
             "q": _source_query(command),
             "lang": "en",
             "max": str(limit),
-            "apikey": api_key,
+            "apikey": credential.api_key,
         }
     )
     payload = _fetch_json(f"https://gnews.io/api/v4/search?{query}")
@@ -424,8 +427,8 @@ def _serpapi_google_news_source_name(item: Dict[str, Any]) -> str:
 
 
 def _collect_serpapi_google_news(command: SourceCollectionCommand) -> List[CollectedSourceDocument]:
-    api_key = os.environ.get("SERPAPI_API_KEY")
-    if not api_key:
+    credential = get_external_provider_credential("serpapi")
+    if credential is None:
         raise MissingSourceCredentialError
 
     limit = _document_limit(command.analysis_mode)
@@ -435,7 +438,7 @@ def _collect_serpapi_google_news(command: SourceCollectionCommand) -> List[Colle
             "q": _source_query(command),
             "gl": "kr" if command.market == "KR" else "us",
             "hl": "ko" if command.market == "KR" else "en",
-            "api_key": api_key,
+            "api_key": credential.api_key,
         }
     )
     payload = _fetch_json(f"https://serpapi.com/search.json?{query}")
@@ -527,11 +530,11 @@ def collect_sources(
         try:
             documents.extend(_collect_external_adapter(adapter, command))
         except MissingSourceCredentialError:
-            warnings.append(f"missing_credential:{adapter}")
+            record_provider_warning(warnings, "missing_credential", adapter)
         except AssertionError:
             raise
         except Exception:
-            warnings.append(f"provider_error:{adapter}")
+            record_provider_warning(warnings, "provider_error", adapter)
 
     if requested_seeded_only:
         warnings.append("seeded_offline_adapters_only")

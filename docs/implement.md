@@ -2,6 +2,345 @@
 
 Newest phases go first. Record concrete implementation notes, commands, validation, and unresolved risks for each phase.
 
+## phase_103 - Chat News Digest Component Split
+
+Status: completed
+
+Implementation notes:
+
+- Extracted article-domain resolution, favicon rendering, key-point rendering, article cards, provider transparency, and additional-article expansion into `NewsDigestView`.
+- Kept `ChatShell` responsible for conversation state, sending, chart overrides, and message composition.
+- Added standalone `NewsDigestView` unit coverage for Korean labels and expandable additional articles.
+
+Validation:
+
+- RED: `cd src/frontend && npm test -- NewsDigestView.test.tsx` failed before implementation because `NewsDigestView` did not exist.
+- GREEN: `cd src/frontend && npm test -- NewsDigestView.test.tsx ChatShell.test.tsx` passed with 12 tests.
+- `cd src/frontend && npm test` passed with 52 tests across 9 files.
+- `cd src/frontend && npm run typecheck` passed.
+- `cd src/frontend && npm run build` passed.
+
+Risks and follow-ups:
+
+- This phase does not introduce React Query/SWR. Data-fetching standardization remains a later frontend cleanup once more server state is shared across views.
+
+## phase_102 - Backend E2E Chat-To-Analysis Slice
+
+Status: completed
+
+Implementation notes:
+
+- Added `src/backend/tests/e2e` with a deterministic prediction provider and credential setup helper.
+- Added an E2E-style `/conversations` test that saves an LLM key, requests Korean Apple prediction, verifies scoring/source-audit output, checks raw-key absence, and reloads the saved conversation.
+- Updated validation workflow docs to call out the E2E slice for conversation/provider phases.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend:src/backend/tests python3 -m pytest src/backend/tests/e2e/test_chat_to_analysis.py -q` failed before helper creation because `e2e.helpers` did not exist.
+- GREEN: `PYTHONPATH=src/backend:src/backend/tests python3 -m pytest src/backend/tests/e2e/test_chat_to_analysis.py -q` passed with 1 test and one local urllib3 LibreSSL warning.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 161 tests and one local urllib3 LibreSSL warning.
+
+Risks and follow-ups:
+
+- The E2E slice uses a deterministic provider fake and does not exercise live external providers or network calls.
+
+## phase_101 - External Provider Credential Boundary
+
+Status: completed
+
+Implementation notes:
+
+- Added `credentials/external_providers.py` for environment-backed Tavily, GNews, SerpApi, and Naver credential lookup.
+- Marked raw secret fields with `repr=False` so credential objects do not leak secrets through debug representation.
+- Rewired ingestion, news digest, and market-data provider code to call the shared helper instead of directly reading provider API-key environment variables.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase101_external_provider_credentials.py -q` failed before implementation because `credentials.external_providers` did not exist.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase101_external_provider_credentials.py src/backend/tests/test_phase010_ingestion_adapters.py src/backend/tests/test_phase019_live_market_and_news.py src/backend/tests/test_phase022_us_market_data_provider.py src/backend/tests/test_phase064_069_news_digest.py -q` passed with 27 tests.
+- `rg -n "os\\.environ|getenv|SERPAPI_API_KEY|TAVILY_API_KEY|GNEWS_API_KEY|NAVER_CLIENT" src/backend/app/features/ingestion/service.py src/backend/app/features/news_digest/service.py src/backend/app/features/market_data/service.py src/backend/app/features/credentials/external_providers.py` showed provider env access centralized in `external_providers.py`.
+
+Risks and follow-ups:
+
+- Credentials remain environment-backed for search/news/market-data providers. A later setup/UI phase can add encrypted user-managed credentials for these providers.
+
+## phase_100 - Split Local Cache Storage Domains
+
+Status: completed
+
+Implementation notes:
+
+- Added sidecar persistence for `kv_cache`, `news_processing_runs`, and `prediction_artifacts` under `state.json.d/`.
+- Kept `LocalStateStore.read()`, `write()`, and `update()` APIs unchanged and merged sidecar data transparently on read.
+- Main state JSON now keeps split cache/artifact domains empty after writes, reducing growth pressure on the core settings/conversation file.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_local_state_store.py -q` failed before implementation because cache/artifact values were still stored in the main state file.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_local_state_store.py src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase095_prediction_artifact_store.py -q` passed with 5 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 161 tests and one local urllib3 LibreSSL warning.
+
+Risks and follow-ups:
+
+- This is a local file split, not a database migration. PostgreSQL or another DB-backed repository remains the target for hosted/team mode.
+
+## phase_099 - Provider Warning Helper
+
+Status: completed
+
+Implementation notes:
+
+- Added `app.shared.provider_status` for provider run statuses and warning string construction.
+- Replaced duplicate warning string construction in ingestion and news digest flows with the shared helper.
+- Kept current public warning strings unchanged: `missing_credential:<provider>` and `provider_error:<provider>`.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase099_provider_status.py -q` failed before implementation because `app.shared.provider_status` did not exist.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase099_provider_status.py src/backend/tests/test_phase010_ingestion_adapters.py src/backend/tests/test_phase064_069_news_digest.py -q` passed with 15 tests.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 161 tests and one local urllib3 LibreSSL warning.
+
+Risks and follow-ups:
+
+- This phase standardizes warning construction only. Provider fallback orchestration remains feature-local and can be consolidated later.
+
+## phase_098 - Conversation Formatting Extraction
+
+Status: completed
+
+Implementation notes:
+
+- Added `conversations/formatting.py` for model dumping, message creation, language detection, horizon/mode labels, prediction-window copy, and conversation summaries.
+- Updated `conversations/service.py` to import those helpers, reducing the first slice of formatting responsibility from the large service file.
+- Added direct helper coverage for Korean language detection, horizon labeling, and summary generation.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase098_conversation_formatting.py -q` failed before implementation because `conversations.formatting` did not exist.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase098_conversation_formatting.py -q` passed.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 161 tests and one local urllib3 LibreSSL warning.
+
+Risks and follow-ups:
+
+- This is only the first decomposition slice. Intent routing, analysis orchestration, and response assembly remain in `conversations/service.py`.
+
+## phase_097 - In-Flight Work Landing And Cache Surface
+
+Status: completed
+
+Implementation notes:
+
+- Added `processing_cache` schemas and router endpoints for cache status inspection and single-key KV invalidation.
+- Registered the processing-cache router in the FastAPI app alongside the existing AI capability diagnostics route.
+- Extended the phase_093 cache test coverage to verify `/processing-cache/status` namespace counts and `/processing-cache/invalidate` removal behavior.
+- Added `review-gpt` to `.gitignore` to match the existing ignored external review folders.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase093_news_cache_processing_store.py -q` failed before implementation because `/processing-cache/status` returned 404.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase093_news_cache_processing_store.py -q` passed with 2 tests.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase096_ai_capabilities.py -q` passed with 3 tests.
+- `PYTHONPATH=src/backend python3 -m mypy src/backend/app/features/processing_cache src/backend/app/main.py` passed.
+- `python3 -m ruff check src/backend/app/features/processing_cache src/backend/app/main.py src/backend/tests/test_phase093_news_cache_processing_store.py` passed.
+
+Risks and follow-ups:
+
+- Invalidation is intentionally scoped to KV cache entries only. Prediction artifact deletion and broader cache lifecycle policy should be handled in the storage split phase.
+- The local state store remains the backing persistence boundary until the planned storage split and later database migration.
+
+## phase_096 - AI Capability And Prompt Inventory Diagnostics
+
+Status: completed
+
+Implementation notes:
+
+- Added an `/ai/capabilities` backend route with a static provider capability matrix for OpenAI, Cerebras, custom OpenAI-compatible providers, and a future local-model slot.
+- Added a prompt inventory that records current prompt/artifact version names without returning prompt bodies, API keys, or decrypted credentials.
+- Registered the route in the FastAPI app and covered it with a secret-leak unit test.
+
+Validation:
+
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase096_ai_capabilities.py -q` passed as part of the phase_092 through phase_096 targeted run.
+- `PYTHONPATH=src/backend python3 -m ruff check src/backend/app src/backend/tests` passed.
+- `PYTHONPATH=src/backend python3 -m mypy src/backend/app` passed with 59 source files.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 155 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPYCACHEPREFIX=/tmp/stuck_llm_pycache PYTHONPATH=src/backend python3 -m compileall -q src/backend/app src/backend/tests` passed.
+- `rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs` returned no matches.
+- `wc -l AGENTS.md docs/*.md docs/agent-workflows/*.md` completed with 6,769 total lines.
+- `git diff --check` passed.
+
+Risks and follow-ups:
+
+- The matrix is intentionally static in this phase. A later frontend/provider diagnostics phase can attach live provider availability checks.
+
+## phase_095 - Prediction Artifact Store
+
+Status: completed
+
+Implementation notes:
+
+- Added deterministic source-document IDs for analysis decisions based on source content and order, enabling safe artifact replay across repeated identical requests.
+- Added prediction artifact storage in the local state-store DB boundary, keyed by market, symbol, horizon, analysis mode, `as_of_at`, provider, model, base URL, prompt version, and evidence hash.
+- Cached artifacts store summary and structured evidence items only. They do not store raw credentials, hidden system instructions, or full prompt context.
+- Repeated identical Korean prediction requests now reuse the artifact and skip the live provider call while still creating a fresh analysis response and score.
+
+Validation:
+
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase095_prediction_artifact_store.py -q` passed as part of the phase_092 through phase_096 targeted run.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/tests/test_phase092_sp500_stock_universe.py src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase094_sp500_query_templates.py src/backend/tests/test_phase095_prediction_artifact_store.py src/backend/tests/test_phase096_ai_capabilities.py -q` passed with 20 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPATH=src/backend python3 -m ruff check src/backend/app src/backend/tests` passed.
+- `PYTHONPATH=src/backend python3 -m mypy src/backend/app` passed with 59 source files.
+
+Risks and follow-ups:
+
+- Artifact reuse is local-state based in this phase. PostgreSQL migration should add a unique index on artifact key and an index on `(symbol, as_of_at, prompt_version, model_provider, model_name)`.
+
+## phase_094 - S&P 500 Query Templates
+
+Status: completed
+
+Implementation notes:
+
+- Added symbol-specific query profiles for Apple, Google/Alphabet, Nvidia, Tesla, and Walmart.
+- Added sector-aware query profiles for S&P 500 GICS sectors including financials, energy, health care, information technology, consumer, industrials, utilities, real estate, materials, and communication services.
+- Kept baseline company-event queries for earnings, leadership, regulation, analyst consensus, and S&P Global Market Intelligence research.
+- Adjusted the prior generic regulation query so App Store is no longer applied to every US company; Apple still receives App Store-specific coverage through its symbol profile.
+
+Validation:
+
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase094_sp500_query_templates.py -q` passed as part of the phase_092 through phase_096 targeted run.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/tests/test_phase092_sp500_stock_universe.py src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase094_sp500_query_templates.py src/backend/tests/test_phase095_prediction_artifact_store.py src/backend/tests/test_phase096_ai_capabilities.py -q` passed with 20 tests and one local urllib3 LibreSSL warning.
+
+Risks and follow-ups:
+
+- The templates are rule-based. Later phases can enrich S&P 500 company metadata from a DB table with exchange, sector aliases, and localized Korean company names.
+
+## phase_093 - News KV Cache And Processing Records
+
+Status: completed
+
+Implementation notes:
+
+- Added a `processing_cache` feature with deterministic cache keys, TTL-based JSON KV entries, news processing run records, evidence hashing, and prediction artifact helpers.
+- Extended the local state-store DB shape with `kv_cache`, `news_processing_runs`, and `prediction_artifacts`.
+- Updated news provider collection to cache completed provider/query results for 15 minutes and record cache hits/misses plus provider-run transparency.
+- Missing-credential and provider-error results are not cached, so adding credentials can take effect immediately.
+
+Validation:
+
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase093_news_cache_processing_store.py -q` passed as part of the phase_092 through phase_096 targeted run.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/tests/test_phase092_sp500_stock_universe.py src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase094_sp500_query_templates.py src/backend/tests/test_phase095_prediction_artifact_store.py src/backend/tests/test_phase096_ai_capabilities.py -q` passed with 20 tests and one local urllib3 LibreSSL warning.
+
+Risks and follow-ups:
+
+- The current DB boundary is the existing local JSON state store. A later PostgreSQL migration should map the same keys and records into real tables.
+
+## phase_092 - S&P 500 Stock Universe Boundary
+
+Status: completed
+
+Implementation notes:
+
+- Extended the S&P 500 CSV loader to expose sector and sub-industry metadata in `Sp500Company`.
+- Added public helpers to list S&P 500 companies, resolve a company by symbol, build Google Finance candidate queries, and create metadata-only quotes for news lookup.
+- Conversation news routing can now use a metadata-only S&P 500 quote when live quote data is unavailable, while chart and prediction paths still require real or fixture market data.
+- Added representative tests for all-S&P universe size, localized Microsoft resolution, JPMorgan resolution, and Google Finance candidates.
+
+Validation:
+
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase092_sp500_stock_universe.py -q` passed as part of the phase_092 through phase_096 targeted run.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/tests/test_phase092_sp500_stock_universe.py src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase094_sp500_query_templates.py src/backend/tests/test_phase095_prediction_artifact_store.py src/backend/tests/test_phase096_ai_capabilities.py -q` passed with 20 tests and one local urllib3 LibreSSL warning.
+
+Risks and follow-ups:
+
+- Metadata-only quotes intentionally have no price/chart data and are used only to construct news digests.
+
+## phase_091 - Workflow Docs And Unit Test Policy Hardening
+
+Status: completed
+
+Implementation notes:
+
+- Updated code-authoring workflow docs with stock-universe rules, matrix-test expectations, cache key requirements, source adapter cache safety, and prediction artifact invalidation rules.
+- Updated validation workflow docs to require representative `symbol x intent x language` tests, provider fakes, cache hit/miss checks, `as_of_at` cutoff checks, and secret-leak checks.
+- Updated orchestration workflow docs with external repo audit guidance and a clear separation between KV cache acceleration and normalized processing/audit records.
+- Recorded the WealthOS assistant audit decision in `docs/plan.md`: capability matrix, prompt inventory, boolean provider status, data-grounded prompt rules, and cache thinking were portable; framework and secret-policy choices were not adopted.
+
+Validation:
+
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase092_sp500_stock_universe.py src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase094_sp500_query_templates.py src/backend/tests/test_phase095_prediction_artifact_store.py src/backend/tests/test_phase096_ai_capabilities.py -q` passed with 7 tests and one local urllib3 LibreSSL warning after one query-template test fix.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/tests/test_phase092_sp500_stock_universe.py src/backend/tests/test_phase093_news_cache_processing_store.py src/backend/tests/test_phase094_sp500_query_templates.py src/backend/tests/test_phase095_prediction_artifact_store.py src/backend/tests/test_phase096_ai_capabilities.py -q` passed with 20 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPATH=src/backend python3 -m ruff check src/backend/app src/backend/tests` passed.
+- `PYTHONPATH=src/backend python3 -m mypy src/backend/app` passed with 59 source files.
+
+Risks and follow-ups:
+
+- No new skill installation was needed. Existing project-local skills covered architecture, database design, backend implementation, stock-analysis LLM behavior, workflow docs, and validation.
+
+## phase_090 - US Mega-Cap Intent Matrix Regression
+
+Status: completed
+
+Implementation notes:
+
+- Added a focused backend regression matrix for `애플`, `구글`, `엔비디아`, and `테슬라`.
+- Covered three user intents per symbol: Korean news digest, Korean stock chart/snapshot, and Korean prediction.
+- The fake LLM intent provider intentionally returns `other`, so the test locks in deterministic local routing and alias/S&P 500 resolution rather than relying on the classifier.
+- The fake SerpApi Google Finance fixture includes chart bars and USD/KRW lookup handling, matching the Korean market snapshot response path.
+- No production code change was needed for this phase; the current SerpApi-backed path already supports all four names when provider data is available.
+
+Validation:
+
+- Ad hoc matrix check passed for 12 paths: four symbols times news, chart, and prediction.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py -q` passed.
+- `PYTHONPATH=src/backend python3 -m ruff check src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/app/features/conversations/service.py src/backend/tests/test_phase064_069_news_digest.py` passed.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/tests/test_phase055_058_market_chat.py src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py -q` passed with 19 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPYCACHEPREFIX=/tmp/stuck_llm_pycache PYTHONPATH=src/backend python3 -m compileall src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py src/backend/app/features/conversations/service.py src/backend/tests/test_phase064_069_news_digest.py` passed.
+- `PYTHONPATH=src/backend python3 -m mypy src/backend/app/features/conversations/service.py src/backend/app/features/news_digest src/backend/app/features/market_data` passed with no issues.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 148 tests and one local urllib3 LibreSSL warning.
+- `git diff --check` passed.
+
+Code areas to consider next:
+
+- `src/backend/app/features/market_data/service.py`: NVDA and TSLA resolve through S&P 500 aliases only when live or mocked US quote data is available; without `SERPAPI_API_KEY` or FinanceDataReader data, they do not have local fixture fallback.
+- `src/backend/app/features/conversations/service.py`: routing is now broad enough for news, chart/snapshot, and prediction, but a future chart-specific intent could make `차트` handling explicit rather than relying on generic snapshot behavior after quote resolution.
+- `src/backend/app/features/news_digest/service.py`: diversified US company-event query templates are shared across all US stocks; later phases may need symbol-specific query tuning for AI/chip, EV, antitrust, or product-cycle categories.
+
+Recommended next phase direction:
+
+- Add production-grade fallback behavior for popular US mega-caps when live market data is unavailable, or explicitly document that NVDA/TSLA require live provider data.
+- Consider a `phase_091` chart-intent polish that treats `차트`, `그래프`, and `chart` as first-class market snapshot cues and adds frontend tests for chart rendering across these four symbols.
+
+Risks and follow-ups:
+
+- This phase validates backend routing with deterministic provider fakes. It does not perform live SerpApi, Tavily, GNews, or LLM network validation.
+
+## phase_089 - News Review Routing And Test Isolation
+
+Status: completed
+
+Implementation notes:
+
+- Reviewed the `phase_086` through `phase_088` continuation work around optional Naver, public social news search, and Korean prediction fallback.
+- Added social-news routing keywords so Korean requests such as `애플 SNS 반응` enter the news digest path without relying on LLM intent classification.
+- Added a regression test proving the conversation path includes `serpapi_social_web` provider runs and public X results for social-reaction requests.
+- Isolated existing news digest tests from developer-local `NAVER_CLIENT_ID` and `NAVER_CLIENT_SECRET` environment variables.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py::test_korean_social_reaction_request_routes_to_news_digest_without_llm_intent -q` failed with no `news_digest` payload before the routing fix.
+- GREEN: the same test passed after adding social-news routing keywords.
+- `NAVER_CLIENT_ID=local NAVER_CLIENT_SECRET=local PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py::test_news_digest_collects_providers_dedupes_and_tracks_transparency -q` passed after test environment isolation.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py -q` passed with 12 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPATH=src/backend python3 -m ruff check src/backend/app/features/conversations/service.py src/backend/tests/test_phase064_069_news_digest.py` passed.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 147 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPYCACHEPREFIX=/tmp/stuck_llm_pycache PYTHONPATH=src/backend python3 -m compileall src/backend/app/features/conversations/service.py src/backend/tests/test_phase064_069_news_digest.py` passed.
+- `PYTHONPATH=src/backend python3 -m mypy src/backend/app/features/conversations/service.py src/backend/app/features/news_digest` passed with no issues.
+
+Risks and follow-ups:
+
+- Social routing remains intentionally conservative: generic person/policy cues still only expand social search after a news request, while standalone routing requires explicit social platform terms such as `SNS`, `social`, `twitter`, `facebook`, or `트위터`.
+
 ## phase_088 - News Source Validation, Docs, And Push Prep
 
 Status: completed

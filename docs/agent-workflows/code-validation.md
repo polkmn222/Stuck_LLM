@@ -56,9 +56,19 @@ cd src/frontend && npm audit --audit-level=high
 
 - Run validation after every code change.
 - Unit tests are required for backend and frontend feature/behavior changes.
+- Backend conversation changes must include matrix tests for representative
+  `symbol x intent x language` combinations when routing or market resolution changes.
+- News/query-template changes must test provider fakes, cache hit/miss behavior,
+  source transparency, and representative S&P 500 sectors without live network calls.
+- Prediction/cache changes must test `as_of_at` cutoffs, evidence-hash reuse,
+  prompt/model version cache misses, and absence of raw credentials or system
+  prompt text in stored artifacts.
 - Record validation commands and results in `docs/implement.md`.
 - If a validation tool is not configured yet, state that clearly in the phase notes.
 - Do not mark a phase complete when known validation failures remain.
 - Provider/API-key phases must include a `/conversations` test that proves user-visible use of the saved key.
 - Conversation phases must test repeated follow-up messages and reloading saved conversations by ID.
+- Conversation/provider integration phases should add or update the backend E2E slice under `src/backend/tests/e2e` when the request/analysis/scoring/persistence path changes.
 - Rich market-data phases must test schema mapping and UI rendering for chart, key stats, and news when available.
+- AI capability or prompt-registry phases must expose provider support and prompt
+  versions without returning API keys, decrypted credentials, or hidden prompt text.

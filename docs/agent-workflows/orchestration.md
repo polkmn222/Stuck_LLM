@@ -106,6 +106,22 @@ Record architecture decisions in `docs/plan.md` until a dedicated ADR folder exi
 - Use `stock-analysis-llm` before connecting eligible evidence to live provider calls or changing source-grounded analysis prompts.
 - Use `systematic-debugging` for probability mismatches, cutoff leaks, missing evidence, duplicated sources, or confidence-score regressions.
 - Use `security-auditor` when source text could include prompt injection or when evidence is sent to external LLM providers.
+- Use `database-design` when adding stock-universe tables, processing records,
+  provider-response KV caches, prediction artifacts, cache invalidation, or indexes.
+- Keep KV caches separate from normalized processing records: KV is for reusable
+  provider/model payloads, while processing records are for audit, evidence
+  lineage, and replay.
+- Prediction artifact reuse must be bounded by `as_of_at`, evidence hash,
+  prompt version, provider, model, and horizon. Future evidence or PnL data must
+  never invalidate this boundary by being mixed into historical analysis.
+
+### External Repo Audit
+
+- Review external repositories for portable patterns before copying code.
+- Do not import dependency policy, secret storage policy, or framework structure
+  from an external repo unless it matches this project.
+- Record adopted patterns in `docs/plan.md` or `docs/implement.md`, and add
+  unit tests before relying on them in conversation, news, market-data, or LLM paths.
 
 ### Backtesting, PnL, And Quant Analytics
 

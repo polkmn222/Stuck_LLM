@@ -1,6 +1,5 @@
 import html
 import json
-import os
 import re
 import urllib.error
 import urllib.parse
@@ -10,6 +9,13 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 from uuid import uuid4
 
+from pydantic import BaseModel
+
+from app.features.credentials.external_providers import (
+    get_external_provider_credential,
+    get_naver_search_credential,
+)
+from app.features.market_data import service as market_data_service
 from app.features.market_data.schemas import MarketQuote
 from app.features.news_digest.schemas import (
     NewsArticle,
@@ -20,6 +26,13 @@ from app.features.news_digest.schemas import (
     NewsSearchRun,
     NewsSearchStatus,
 )
+from app.features.processing_cache.service import (
+    get_cached_json,
+    record_news_processing_run,
+    set_cached_json,
+)
+from app.shared.provider_status import record_provider_warning
+from app.shared.state_store import LocalStateStore
 
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 SERPAPI_SEARCH_URL = "https://serpapi.com/search.json"
@@ -45,6 +58,7 @@ NEWS_QUERY_SUFFIX = "latest company news earnings official business controversy"
 SOCIAL_QUERY_SUFFIX = (
     "(site:x.com OR site:twitter.com OR site:facebook.com) public posts CEO Trump policy tariffs"
 )
+NEWS_PROVIDER_CACHE_TTL_SECONDS = 15 * 60
 SNIPPET_MAX_LENGTH = 260
 QUOTE_PAGE_DOMAINS = (
     "finance.yahoo.com",
@@ -69,6 +83,68 @@ CATEGORY_BASE_SCORES: Dict[NewsCategory, float] = {
     "quote_page": -80.0,
 }
 
+SYMBOL_QUERY_PROFILES: Dict[str, Tuple[str, ...]] = {
+    "AAPL": (
+        "iPhone services Apple Intelligence supply chain App Store",
+        "China demand services margin device cycle",
+    ),
+    "GOOG": (
+        "Search ads Google Cloud AI Gemini antitrust",
+        "YouTube advertising cloud margin regulation",
+    ),
+    "GOOGL": (
+        "Search ads Google Cloud AI Gemini antitrust",
+        "YouTube advertising cloud margin regulation",
+    ),
+    "NVDA": (
+        "GPU AI data center Blackwell chip demand supply",
+        "semiconductor export controls hyperscaler capex",
+    ),
+    "TSLA": (
+        "EV deliveries margins autonomous driving energy storage",
+        "robotaxi FSD battery pricing competition",
+    ),
+    "WMT": (
+        "consumer demand pricing margins retail traffic supply chain",
+    ),
+}
+
+SECTOR_QUERY_PROFILES: Dict[str, Tuple[str, ...]] = {
+    "Communication Services": (
+        "advertising streaming subscribers AI content regulation",
+    ),
+    "Consumer Discretionary": (
+        "consumer demand pricing margins deliveries product cycle",
+    ),
+    "Consumer Staples": (
+        "pricing volume margins retailer demand supply chain",
+    ),
+    "Energy": (
+        "oil gas production refining OPEC capex commodity prices",
+    ),
+    "Financials": (
+        "net interest income credit losses capital markets regulation",
+    ),
+    "Health Care": (
+        "FDA clinical trial drug pipeline reimbursement guidance",
+    ),
+    "Industrials": (
+        "orders backlog aerospace defense supply chain capex",
+    ),
+    "Information Technology": (
+        "AI cloud semiconductor software demand product roadmap",
+    ),
+    "Materials": (
+        "commodity demand pricing volumes China industrial cycle",
+    ),
+    "Real Estate": (
+        "occupancy rents cap rates financing debt maturity",
+    ),
+    "Utilities": (
+        "rate case power demand renewables grid investment",
+    ),
+}
+
 
 class MissingNewsCredentialError(Exception):
     pass
@@ -76,6 +152,12 @@ class MissingNewsCredentialError(Exception):
 
 class NewsProviderError(Exception):
     pass
+
+
+def _model_dump(model: BaseModel) -> Dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return cast(Dict[str, Any], model.model_dump())
+    return cast(Dict[str, Any], model.dict())
 
 
 def _now() -> str:
@@ -408,12 +490,21 @@ def _build_news_queries(quote: MarketQuote, requested_query: str) -> Tuple[str, 
             )
         )
     company = f"{quote.name} {quote.symbol}"
+    sp500_company = market_data_service.get_sp500_company(quote.symbol)
+    symbol_queries = SYMBOL_QUERY_PROFILES.get(quote.symbol.upper(), ())
+    sector_queries = (
+        SECTOR_QUERY_PROFILES.get(sp500_company.sector, ())
+        if sp500_company is not None
+        else ()
+    )
     return _dedupe_queries(
         (
             primary_query,
+            *[f"{company} {query}" for query in symbol_queries],
+            *[f"{company} {query}" for query in sector_queries],
             f"{company} product launch service AI strategy",
             f"{company} CEO leadership executive succession",
-            f"{company} regulation lawsuit antitrust App Store controversy",
+            f"{company} regulation lawsuit antitrust controversy",
             f"{company} analyst target valuation research consensus",
             f"site:spglobal.com/market-intelligence {company} earnings preview Visible Alpha",
         )
@@ -448,12 +539,12 @@ def _expand_default_providers(
     if providers != DEFAULT_NEWS_PROVIDERS:
         return providers
     expanded: List[NewsProvider] = list(providers)
-    if os.environ.get("NAVER_CLIENT_ID", "").strip() and os.environ.get(
-        "NAVER_CLIENT_SECRET",
-        "",
-    ).strip():
+    if get_naver_search_credential() is not None:
         expanded.append("naver_news")
-    if os.environ.get("SERPAPI_API_KEY", "").strip() and _social_source_requested(requested_query):
+    if (
+        get_external_provider_credential("serpapi") is not None
+        and _social_source_requested(requested_query)
+    ):
         expanded.append("serpapi_social_web")
     return _dedupe_providers(expanded)
 
@@ -489,13 +580,13 @@ def _provider_queries(
 
 
 def _collect_tavily_news(query: str, limit: int) -> List[NewsArticle]:
-    api_key = os.environ.get("TAVILY_API_KEY", "").strip()
-    if not api_key:
+    credential = get_external_provider_credential("tavily")
+    if credential is None:
         raise MissingNewsCredentialError
     payload = _fetch_json(
         "https://api.tavily.com/search",
         payload={
-            "api_key": api_key,
+            "api_key": credential.api_key,
             "query": query,
             "search_depth": "basic",
             "max_results": limit,
@@ -523,9 +614,8 @@ def _collect_tavily_news(query: str, limit: int) -> List[NewsArticle]:
 
 
 def _collect_naver_news(query: str, limit: int) -> List[NewsArticle]:
-    client_id = os.environ.get("NAVER_CLIENT_ID", "").strip()
-    client_secret = os.environ.get("NAVER_CLIENT_SECRET", "").strip()
-    if not client_id or not client_secret:
+    credential = get_naver_search_credential()
+    if credential is None:
         raise MissingNewsCredentialError
     encoded_query = urllib.parse.urlencode(
         {
@@ -537,8 +627,8 @@ def _collect_naver_news(query: str, limit: int) -> List[NewsArticle]:
     payload = _fetch_json(
         f"https://openapi.naver.com/v1/search/news.json?{encoded_query}",
         headers={
-            "X-Naver-Client-Id": client_id,
-            "X-Naver-Client-Secret": client_secret,
+            "X-Naver-Client-Id": credential.client_id,
+            "X-Naver-Client-Secret": credential.client_secret,
         },
     )
     articles: List[NewsArticle] = []
@@ -561,15 +651,15 @@ def _collect_naver_news(query: str, limit: int) -> List[NewsArticle]:
 
 
 def _collect_gnews_news(query: str, limit: int) -> List[NewsArticle]:
-    api_key = os.environ.get("GNEWS_API_KEY", "").strip()
-    if not api_key:
+    credential = get_external_provider_credential("gnews")
+    if credential is None:
         raise MissingNewsCredentialError
     encoded_query = urllib.parse.urlencode(
         {
             "q": query,
             "lang": "en",
             "max": str(limit),
-            "apikey": api_key,
+            "apikey": credential.api_key,
         }
     )
     payload = _fetch_json(f"https://gnews.io/api/v4/search?{encoded_query}")
@@ -623,8 +713,8 @@ def _serpapi_news_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _collect_serpapi_google_news(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
-    api_key = os.environ.get("SERPAPI_API_KEY", "").strip()
-    if not api_key:
+    credential = get_external_provider_credential("serpapi")
+    if credential is None:
         raise MissingNewsCredentialError
     encoded_query = urllib.parse.urlencode(
         {
@@ -632,7 +722,7 @@ def _collect_serpapi_google_news(query: str, limit: int, quote: MarketQuote) -> 
             "q": query,
             "gl": "kr" if quote.market == "KR" else "us",
             "hl": "ko" if quote.market == "KR" else "en",
-            "api_key": api_key,
+            "api_key": credential.api_key,
         }
     )
     payload = _fetch_json(f"{SERPAPI_SEARCH_URL}?{encoded_query}")
@@ -654,8 +744,8 @@ def _collect_serpapi_google_news(query: str, limit: int, quote: MarketQuote) -> 
 
 
 def _collect_serpapi_google_web(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
-    api_key = os.environ.get("SERPAPI_API_KEY", "").strip()
-    if not api_key:
+    credential = get_external_provider_credential("serpapi")
+    if credential is None:
         raise MissingNewsCredentialError
     encoded_query = urllib.parse.urlencode(
         {
@@ -665,7 +755,7 @@ def _collect_serpapi_google_web(query: str, limit: int, quote: MarketQuote) -> L
             "google_domain": "google.com",
             "hl": "ko" if quote.market == "KR" else "en",
             "gl": "kr" if quote.market == "KR" else "us",
-            "api_key": api_key,
+            "api_key": credential.api_key,
         }
     )
     payload = _fetch_json(f"{SERPAPI_SEARCH_URL}?{encoded_query}")
@@ -716,6 +806,57 @@ def _collect_provider(
     if provider == "serpapi_social_web":
         return _collect_serpapi_social_web(query, limit, quote)
     return _collect_serpapi_google_web(query, limit, quote)
+
+
+def _provider_cache_components(
+    provider: NewsProvider,
+    query: str,
+    limit: int,
+    quote: MarketQuote,
+) -> Dict[str, Any]:
+    return {
+        "provider": provider,
+        "query": query,
+        "limit": limit,
+        "market": quote.market,
+        "symbol": quote.symbol,
+        "provider_version": "phase_093_news_provider_v1",
+    }
+
+
+def _collect_provider_with_cache(
+    provider: NewsProvider,
+    query: str,
+    limit: int,
+    quote: MarketQuote,
+    store: Optional[LocalStateStore],
+    cache_ttl_seconds: int,
+) -> Tuple[List[NewsArticle], bool]:
+    components = _provider_cache_components(provider, query, limit, quote)
+    if store is not None:
+        cached_payload = get_cached_json(store, "news_provider_result", components)
+        if cached_payload is not None:
+            cached_articles = cached_payload.get("articles")
+            if isinstance(cached_articles, list):
+                return (
+                    [
+                        NewsArticle(**article)
+                        for article in cached_articles
+                        if isinstance(article, dict)
+                    ],
+                    True,
+                )
+
+    articles = _collect_provider(provider, query, limit, quote)
+    if store is not None:
+        set_cached_json(
+            store,
+            "news_provider_result",
+            components,
+            {"articles": [_model_dump(article) for article in articles]},
+            ttl_seconds=cache_ttl_seconds,
+        )
+    return articles, False
 
 
 def _dedupe_key(article: NewsArticle) -> str:
@@ -865,6 +1006,8 @@ def create_news_digest(
     provider_limit: int = 10,
     important_limit: int = 5,
     additional_limit: int = 10,
+    store: Optional[LocalStateStore] = None,
+    cache_ttl_seconds: int = NEWS_PROVIDER_CACHE_TTL_SECONDS,
 ) -> NewsDigest:
     queries = _build_news_queries(quote, requested_query)
     query = queries[0]
@@ -872,6 +1015,8 @@ def create_news_digest(
     articles: List[NewsArticle] = []
     provider_runs: List[NewsSearchRun] = []
     warnings: List[str] = []
+    cache_hits = 0
+    cache_misses = 0
 
     for provider in active_providers:
         for provider_query in _provider_queries(
@@ -881,26 +1026,28 @@ def create_news_digest(
             requested_query=requested_query,
         ):
             try:
-                provider_articles = _collect_provider(
+                provider_articles, cache_hit = _collect_provider_with_cache(
                     provider,
                     provider_query,
                     provider_limit,
                     quote,
+                    store,
+                    cache_ttl_seconds,
                 )
+                if cache_hit:
+                    cache_hits += 1
+                else:
+                    cache_misses += 1
                 run_status: NewsProviderRunStatus = "completed"
                 warning = None
             except MissingNewsCredentialError:
                 provider_articles = []
                 run_status = "missing_credential"
-                warning = f"missing_credential:{provider}"
-                if warning not in warnings:
-                    warnings.append(warning)
+                warning = record_provider_warning(warnings, run_status, provider)
             except NewsProviderError:
                 provider_articles = []
                 run_status = "provider_error"
-                warning = f"provider_error:{provider}"
-                if warning not in warnings:
-                    warnings.append(warning)
+                warning = record_provider_warning(warnings, run_status, provider)
             articles.extend(provider_articles)
             provider_runs.append(
                 NewsSearchRun(
@@ -929,7 +1076,7 @@ def create_news_digest(
         important_count=len(important_articles),
         language=language,
     )
-    return NewsDigest(
+    digest = NewsDigest(
         digest_id=f"digest_{uuid4().hex}",
         status=status,
         market=quote.market,
@@ -944,3 +1091,12 @@ def create_news_digest(
         provider_runs=provider_runs,
         warnings=warnings,
     )
+    if store is not None:
+        record_news_processing_run(
+            store,
+            digest_payload=_model_dump(digest),
+            cache_hits=cache_hits,
+            cache_misses=cache_misses,
+            query_templates=queries,
+        )
+    return digest

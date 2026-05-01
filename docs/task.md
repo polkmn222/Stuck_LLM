@@ -2,6 +2,367 @@
 
 Newest phases go first. Every implementation phase must use a `phase_00x` identifier and update this file before final handoff.
 
+## phase_103 - Chat News Digest Component Split
+
+Status: completed
+
+Objective:
+
+- Reduce `ChatShell` surface area by moving the news digest rendering subtree into a focused React component without changing UI behavior.
+
+Acceptance criteria:
+
+- `NewsDigestView` renders key articles, provider runs, warnings, and expandable additional articles independently.
+- `ChatShell` imports and uses the extracted component.
+- Existing chat news digest behavior and frontend validation continue to pass.
+
+Files changed:
+
+- `src/frontend/src/features/chat/ChatShell.tsx`
+- `src/frontend/src/features/chat/NewsDigestView.tsx`
+- `src/frontend/src/features/chat/NewsDigestView.test.tsx`
+- `docs/agent-workflows/code-validation.md`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_102 - Backend E2E Chat-To-Analysis Slice
+
+Status: completed
+
+Objective:
+
+- Add a focused backend E2E-style test slice for the persisted `/conversations` chat-to-prediction-analysis path.
+
+Acceptance criteria:
+
+- A deterministic provider can drive `/conversations` through credential setup, stock prediction, scoring, and conversation retrieval.
+- The E2E test verifies source audit prompt IDs and raw-key non-exposure.
+- The helper is isolated under `src/backend/tests/e2e`.
+
+Files changed:
+
+- `src/backend/tests/e2e/__init__.py`
+- `src/backend/tests/e2e/helpers.py`
+- `src/backend/tests/e2e/test_chat_to_analysis.py`
+- `docs/agent-workflows/code-validation.md`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_101 - External Provider Credential Boundary
+
+Status: completed
+
+Objective:
+
+- Centralize environment-backed search/news/market-data provider credential lookup so feature services no longer read provider API-key environment variables directly.
+
+Acceptance criteria:
+
+- Tavily, GNews, SerpApi, and Naver credentials are loaded through one credentials helper.
+- Credential objects do not leak raw secrets through `repr`.
+- Ingestion, news digest, and market-data provider code use the shared helper while preserving missing-credential warnings.
+
+Files changed:
+
+- `src/backend/app/features/credentials/external_providers.py`
+- `src/backend/app/features/ingestion/service.py`
+- `src/backend/app/features/market_data/service.py`
+- `src/backend/app/features/news_digest/service.py`
+- `src/backend/tests/test_phase101_external_provider_credentials.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_100 - Split Local Cache Storage Domains
+
+Status: completed
+
+Objective:
+
+- Move cache and prediction-artifact domains out of the main local state JSON file while keeping the existing `LocalStateStore` API stable.
+
+Acceptance criteria:
+
+- `kv_cache`, `news_processing_runs`, and `prediction_artifacts` are written to `state.json.d/*.json` sidecar files.
+- `LocalStateStore.read()` merges sidecar domains transparently.
+- Existing cache, artifact, and conversation flows continue to pass.
+
+Files changed:
+
+- `src/backend/app/shared/state_store.py`
+- `src/backend/tests/test_local_state_store.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_099 - Provider Warning Helper
+
+Status: completed
+
+Objective:
+
+- Share provider status-to-warning behavior across ingestion and news digest provider flows.
+
+Acceptance criteria:
+
+- Missing credential and provider error warnings are built by a shared helper.
+- Duplicate warnings are deduplicated consistently.
+- Ingestion and news digest tests continue to pass.
+
+Files changed:
+
+- `src/backend/app/features/ingestion/service.py`
+- `src/backend/app/features/news_digest/service.py`
+- `src/backend/app/shared/provider_status.py`
+- `src/backend/tests/test_phase099_provider_status.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_098 - Conversation Formatting Extraction
+
+Status: completed
+
+Objective:
+
+- Start decomposing `conversations/service.py` by extracting message, language, horizon, and summary formatting helpers.
+
+Acceptance criteria:
+
+- Conversation formatting helpers live in a dedicated module.
+- `conversations/service.py` uses the extracted helpers without changing chat behavior.
+- New helper tests and existing backend tests pass.
+
+Files changed:
+
+- `src/backend/app/features/conversations/formatting.py`
+- `src/backend/app/features/conversations/service.py`
+- `src/backend/tests/test_phase098_conversation_formatting.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_097 - In-Flight Work Landing And Cache Surface
+
+Status: completed
+
+Objective:
+
+- Land the in-flight AI capability and processing-cache work into a more observable backend surface while addressing immediate repo hygiene findings from external reviews.
+
+Acceptance criteria:
+
+- `processing_cache` exposes a minimal status endpoint for KV cache, news processing run, and prediction artifact counts.
+- `processing_cache` exposes a secret-safe invalidation endpoint for a single KV cache key.
+- The processing-cache route is registered in the FastAPI app and covered by backend unit tests.
+- Review scratch directories ignore `review-gpt` consistently with existing `review-claude` and `review-gemini` entries.
+
+Files changed:
+
+- `.gitignore`
+- `src/backend/app/features/processing_cache/router.py`
+- `src/backend/app/features/processing_cache/schemas.py`
+- `src/backend/app/features/processing_cache/service.py`
+- `src/backend/app/main.py`
+- `src/backend/tests/test_phase093_news_cache_processing_store.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_096 - AI Capability And Prompt Inventory Diagnostics
+
+Status: completed
+
+Objective:
+
+- Add a lightweight, secret-safe AI capability matrix and prompt inventory endpoint inspired by the WealthOS assistant audit.
+
+Acceptance criteria:
+
+- `/ai/capabilities` returns provider capability levels for chat, intent routing, stock analysis, news summary, and prediction-artifact caching.
+- The prompt inventory lists the active prompt/artifact versions used by conversation, news, analysis, and processing-cache paths.
+- The capability response does not expose API keys, decrypted credentials, or hidden prompt text.
+
+Files changed:
+
+- `src/backend/app/features/ai_capabilities/__init__.py`
+- `src/backend/app/features/ai_capabilities/router.py`
+- `src/backend/app/features/ai_capabilities/schemas.py`
+- `src/backend/app/features/ai_capabilities/service.py`
+- `src/backend/app/main.py`
+- `src/backend/tests/test_phase096_ai_capabilities.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_095 - Prediction Artifact Store
+
+Status: completed
+
+Objective:
+
+- Persist and reuse live prediction outputs when the evidence set, prompt version, provider, model, horizon, and `as_of_at` match.
+
+Acceptance criteria:
+
+- Live analysis assigns deterministic source-document IDs from evidence content.
+- Completed live prediction output is stored as a prediction artifact without raw credentials or hidden system prompt text.
+- Repeating the same prediction request reuses the artifact instead of recalling the live provider.
+- Artifact reuse remains scoped to provider/model, prompt version, horizon, `as_of_at`, and evidence hash.
+
+Files changed:
+
+- `src/backend/app/features/analysis/service.py`
+- `src/backend/app/features/processing_cache/__init__.py`
+- `src/backend/app/features/processing_cache/service.py`
+- `src/backend/app/shared/state_store.py`
+- `src/backend/tests/test_phase095_prediction_artifact_store.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_094 - S&P 500 Query Templates
+
+Status: completed
+
+Objective:
+
+- Apply symbol-specific and sector-aware news query templates to S&P 500 companies, not only Apple and Google.
+
+Acceptance criteria:
+
+- Apple, Google/Alphabet, Nvidia, Tesla, JPMorgan, Exxon Mobil, Eli Lilly, and Walmart receive relevant query fragments.
+- Generic US news queries still include earnings, leadership, regulation, analyst, and S&P Global research coverage.
+- Existing news digest ranking and provider transparency tests continue to pass.
+
+Files changed:
+
+- `src/backend/app/features/news_digest/service.py`
+- `src/backend/tests/test_phase064_069_news_digest.py`
+- `src/backend/tests/test_phase094_sp500_query_templates.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_093 - News KV Cache And Processing Records
+
+Status: completed
+
+Objective:
+
+- Add DB-backed KV cache behavior for news provider results and record news processing runs for audit/replay.
+
+Acceptance criteria:
+
+- Repeated news provider queries within TTL reuse the cached provider payload.
+- News processing runs record cache hits, misses, provider runs, query templates, and article counts.
+- Cache and processing records do not store API keys or provider secrets.
+
+Files changed:
+
+- `src/backend/app/features/news_digest/service.py`
+- `src/backend/app/features/processing_cache/__init__.py`
+- `src/backend/app/features/processing_cache/service.py`
+- `src/backend/app/shared/state_store.py`
+- `src/backend/tests/test_phase093_news_cache_processing_store.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_092 - S&P 500 Stock Universe Boundary
+
+Status: completed
+
+Objective:
+
+- Promote the local S&P 500 CSV into a reusable stock-universe boundary so news and query templates can resolve all S&P 500 symbols consistently.
+
+Acceptance criteria:
+
+- The S&P 500 universe exposes company name, sector, sub-industry, aliases, and Google Finance candidate queries.
+- Metadata-only S&P 500 quotes can support news lookup when live quote data is unavailable.
+- Representative S&P 500 symbols resolve through the same market-data boundary used by Apple and Google.
+
+Files changed:
+
+- `src/backend/app/features/conversations/service.py`
+- `src/backend/app/features/market_data/service.py`
+- `src/backend/tests/test_phase092_sp500_stock_universe.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_091 - Workflow Docs And Unit Test Policy Hardening
+
+Status: completed
+
+Objective:
+
+- Update agent workflow docs for external repo audits, S&P 500 matrix testing, cache/processing DB policy, and unit-test rigor.
+
+Acceptance criteria:
+
+- Code-authoring docs describe stock universe rules, cache keys, source adapter cache safety, and prediction artifact invalidation.
+- Validation docs require matrix tests, provider fakes, cache hit/miss tests, and secret-leak checks for affected features.
+- Orchestration docs route cache/processing DB work through database design and separate KV cache from normalized audit records.
+
+Files changed:
+
+- `docs/agent-workflows/code-authoring.md`
+- `docs/agent-workflows/code-validation.md`
+- `docs/agent-workflows/orchestration.md`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_090 - US Mega-Cap Intent Matrix Regression
+
+Status: completed
+
+Objective:
+
+- Tighten unit coverage for Korean user requests about Apple, Google, Nvidia, and Tesla across news, stock chart, and prediction paths.
+
+Acceptance criteria:
+
+- `애플`, `구글`, `엔비디아`, and `테슬라` route to US symbols `AAPL`, `GOOG`, `NVDA`, and `TSLA`.
+- Korean news requests for all four symbols return `news_digest` without requiring an analysis horizon.
+- Korean stock chart requests for all four symbols return `market_snapshot` with Google Finance chart bars.
+- Korean prediction requests for all four symbols return `analysis_completed` with default `swing` horizon probabilities.
+- The matrix does not rely on successful LLM intent classification and does not leak LLM or search provider secrets.
+
+Files changed:
+
+- `src/backend/tests/test_phase090_us_mega_cap_intent_matrix.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_089 - News Review Routing And Test Isolation
+
+Status: completed
+
+Objective:
+
+- Review the `phase_086` onward news/prediction continuation work and patch issues found during validation.
+
+Acceptance criteria:
+
+- Korean social-reaction requests such as `애플 SNS 반응` route to a news digest without relying on LLM intent classification.
+- Social-reaction news requests include the public SerpApi social web provider when `SERPAPI_API_KEY` is configured.
+- News digest tests remain stable when developer-local Naver credentials are present in the environment.
+- Backend lint, type, compile, and test validation passes.
+
+Files changed:
+
+- `src/backend/app/features/conversations/service.py`
+- `src/backend/tests/test_phase064_069_news_digest.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
 ## phase_088 - News Source Validation, Docs, And Push Prep
 
 Status: completed

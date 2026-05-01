@@ -5,8 +5,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, cast
 from uuid import uuid4
 
-from pydantic import BaseModel
-
 from app.features.analysis.live_provider import (
     ChatCompletionProvider,
     ChatCompletionProviderRequest,
@@ -27,14 +25,21 @@ from app.features.analysis.schemas import (
 from app.features.analysis.service import create_live_analysis
 from app.features.backtest.schemas import BacktestCommand, BacktestResponse
 from app.features.backtest.service import BacktestError, run_backtest
+from app.features.conversations.formatting import (
+    conversation_summary as _conversation_summary,
+    format_analysis_mode as _format_analysis_mode,
+    format_horizon as _format_horizon,
+    model_dump as _model_dump,
+    new_message as _new_message,
+    prediction_window_text as _prediction_window_text,
+    response_language as _response_language,
+)
 from app.features.conversations.schemas import (
     AnalysisRequestSnapshot,
     ConversationCommand,
     ConversationListResponse,
     ConversationMessage,
     ConversationResponse,
-    ConversationSummary,
-    MessageRole,
     MissingInput,
     StockConfirmationSnapshot,
 )
@@ -47,6 +52,7 @@ from app.features.market_data.service import (
     find_quote_confirmation_candidate,
     get_quote,
     get_usd_krw_rate,
+    resolve_sp500_metadata_quote_from_text,
     resolve_quote_from_text,
 )
 from app.features.news_digest.schemas import NewsDigest
@@ -125,6 +131,15 @@ NEWS_TYPO_KEYWORDS = (
     "newss",
     "nwes",
 )
+SOCIAL_NEWS_KEYWORDS = (
+    "sns",
+    "social",
+    "twitter",
+    "facebook",
+    "x.com",
+    "트위터",
+    "페이스북",
+)
 PNL_KEYWORDS = (
     "if i bought",
     "if i purchased",
@@ -149,74 +164,6 @@ SOURCE_HINT_ADAPTER_KEYWORDS: tuple[tuple[SourceAdapter, tuple[str, ...]], ...] 
 )
 DEFAULT_USD_KRW_RATE = 1400.0
 DEFAULT_PREDICTION_HORIZON: HorizonType = "swing"
-
-
-def _model_dump(model: BaseModel) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return cast(Dict[str, Any], model.model_dump())
-    return cast(Dict[str, Any], model.dict())
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _new_message(
-    role: MessageRole,
-    content: str,
-    meta: str,
-    market_snapshot: Optional[MarketQuote] = None,
-    stock_confirmation: Optional[StockConfirmationSnapshot] = None,
-    news_digest: Optional[NewsDigest] = None,
-    backtest_result: Optional[BacktestResponse] = None,
-) -> ConversationMessage:
-    return ConversationMessage(
-        id=f"msg_{uuid4().hex}",
-        role=role,
-        content=content,
-        meta=meta,
-        created_at=_now(),
-        market_snapshot=market_snapshot,
-        stock_confirmation=stock_confirmation,
-        news_digest=news_digest,
-        backtest_result=backtest_result,
-    )
-
-
-def _detect_language(content: str) -> UserLanguage:
-    if any("\uac00" <= character <= "\ud7a3" for character in content):
-        return "ko"
-    return "en"
-
-
-def _response_language(content: str, explicit_language: Optional[UserLanguage]) -> UserLanguage:
-    return explicit_language or _detect_language(content)
-
-
-def _format_horizon(horizon_type: HorizonType, language: UserLanguage) -> str:
-    english_labels = {
-        "intraday": "intraday",
-        "swing": "swing",
-        "long_term": "long-term",
-    }
-    korean_labels = {
-        "intraday": "장중",
-        "swing": "스윙",
-        "long_term": "장기",
-    }
-    return korean_labels[horizon_type] if language == "ko" else english_labels[horizon_type]
-
-
-def _prediction_window_text(horizon_type: HorizonType, language: UserLanguage) -> str:
-    if horizon_type == "swing":
-        return "향후 5거래일" if language == "ko" else "the next 5 trading days"
-    return _format_horizon(horizon_type, language)
-
-
-def _format_analysis_mode(analysis_mode: AnalysisMode, language: UserLanguage) -> str:
-    if language == "ko":
-        return "빠른" if analysis_mode == "quick" else "심층"
-    return analysis_mode
 
 
 def _recent_chat_context(
@@ -596,6 +543,11 @@ def _news_typo_requested(content: str) -> bool:
     return any(keyword in compact for keyword in NEWS_TYPO_KEYWORDS)
 
 
+def _social_news_requested(content: str) -> bool:
+    normalized = content.lower()
+    return any(keyword in normalized for keyword in SOCIAL_NEWS_KEYWORDS)
+
+
 def _pnl_keywords_requested(content: str) -> bool:
     normalized = content.lower()
     return any(keyword in normalized for keyword in PNL_KEYWORDS)
@@ -684,7 +636,11 @@ def _wants_stock_analysis(
 def _wants_news_digest(content: str, intent: Optional[ChatIntentOutput]) -> bool:
     if intent is not None and intent.intent == "news_digest":
         return True
-    return _news_keywords_requested(content) or _news_typo_requested(content)
+    return (
+        _news_keywords_requested(content)
+        or _news_typo_requested(content)
+        or _social_news_requested(content)
+    )
 
 
 def _market_snapshot_requested(
@@ -1372,6 +1328,8 @@ def _build_response(
     )
     wants_news = _wants_news_digest(content, intent)
     wants_pnl = _pnl_keywords_requested(content)
+    if quote is None and stock_candidate is None and wants_news:
+        quote = resolve_sp500_metadata_quote_from_text(content)
     if (
         wants_analysis
         and not wants_pnl
@@ -1552,6 +1510,7 @@ def _build_response(
             quote,
             requested_query=content,
             language=language,
+            store=store,
         )
         news_digest = _complete_news_digest_summary(
             store,
@@ -1737,24 +1696,6 @@ def clear_conversations(store: LocalStateStore) -> int:
         return deleted_count
 
     return store.update(mutate)
-
-
-def _conversation_summary(conversation_id: str, stored: Dict[str, Any]) -> ConversationSummary:
-    messages = [
-        ConversationMessage(**message) for message in stored.get("messages", [])
-    ]
-    first_user = next((message for message in messages if message.role == "user"), None)
-    last_message = messages[-1] if messages else None
-    title = first_user.content.strip() if first_user is not None else "Untitled conversation"
-    if len(title) > 64:
-        title = f"{title[:61]}..."
-    return ConversationSummary(
-        conversation_id=conversation_id,
-        title=title,
-        status=stored.get("status", "ready_for_analysis"),
-        updated_at=last_message.created_at if last_message is not None else "",
-        last_message=last_message.content if last_message is not None else "",
-    )
 
 
 def list_conversations(store: LocalStateStore) -> ConversationListResponse:
