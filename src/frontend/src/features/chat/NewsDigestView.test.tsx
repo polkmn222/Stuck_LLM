@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { NewsDigestView } from "./NewsDigestView";
+import { uiCopy } from "../../shared/i18n";
 import type { NewsDigest } from "../../shared/types";
 
 const digest: NewsDigest = {
@@ -62,7 +63,7 @@ const digest: NewsDigest = {
 };
 
 it("renders news digest key articles and expands additional articles", () => {
-  render(<NewsDigestView digest={digest} language="ko" />);
+  render(<NewsDigestView copy={uiCopy.ko.chat.newsDigest} digest={digest} />);
 
   expect(screen.getByLabelText("Apple Inc news digest")).toBeInTheDocument();
   expect(screen.getAllByText("애플 실적 미리보기")).toHaveLength(2);

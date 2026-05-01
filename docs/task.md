@@ -2,6 +2,75 @@
 
 Newest phases go first. Every implementation phase must use a `phase_00x` identifier and update this file before final handoff.
 
+## phase_106 - News Digest i18n Label Boundary
+
+Status: completed
+
+Objective:
+
+- Move `NewsDigestView` UI labels into the shared i18n copy boundary so the component no longer branches on language internally.
+
+Acceptance criteria:
+
+- English and Korean news digest labels live in `uiCopy`.
+- `ChatShell` passes the localized news digest copy into `NewsDigestView`.
+- Existing news digest rendering behavior and frontend validation continue to pass.
+
+Files changed:
+
+- `src/frontend/src/shared/i18n.ts`
+- `src/frontend/src/features/chat/ChatShell.tsx`
+- `src/frontend/src/features/chat/NewsDigestView.tsx`
+- `src/frontend/src/features/chat/NewsDigestView.test.tsx`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_105 - Local State Sidecar Write Optimization
+
+Status: completed
+
+Objective:
+
+- Avoid rewriting unchanged split local-state sidecar files when only one cache/artifact domain changes.
+
+Acceptance criteria:
+
+- `LocalStateStore` compares each split payload before replacing its sidecar file.
+- Sidecar atomic temp filenames are based on the target sidecar path.
+- Existing state-store split/merge behavior and backend tests continue to pass.
+
+Files changed:
+
+- `src/backend/app/shared/state_store.py`
+- `src/backend/tests/test_local_state_store.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
+## phase_104 - Conversation News Digest Formatting Extraction
+
+Status: completed
+
+Objective:
+
+- Continue decomposing `conversations/service.py` by moving news digest prompt and LLM-output formatting helpers into a focused module.
+
+Acceptance criteria:
+
+- News digest summary prompts, JSON extraction, fallback summary handling, and article update mapping live outside `conversations/service.py`.
+- Structured LLM output still updates digest summary, Korean article copy, and supported categories only.
+- Existing conversation/news digest behavior and backend validation continue to pass.
+
+Files changed:
+
+- `src/backend/app/features/conversations/news_digest_formatting.py`
+- `src/backend/app/features/conversations/service.py`
+- `src/backend/tests/test_phase104_news_digest_formatting.py`
+- `docs/implement.md`
+- `docs/plan.md`
+- `docs/task.md`
+
 ## phase_103 - Chat News Digest Component Split
 
 Status: completed

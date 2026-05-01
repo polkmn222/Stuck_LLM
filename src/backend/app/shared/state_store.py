@@ -115,11 +115,20 @@ class LocalStateStore:
     def _write_json_atomic(self, path: Path, payload: Any) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = path.with_name(
-            f"{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+            f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
         )
         with temp_path.open("w", encoding="utf-8") as state_file:
             json.dump(payload, state_file, indent=2, sort_keys=True)
         temp_path.replace(path)
+
+    def _json_payload_matches(self, path: Path, payload: Any) -> bool:
+        if not path.exists():
+            return False
+        try:
+            with path.open("r", encoding="utf-8") as state_file:
+                return json.load(state_file) == payload
+        except (OSError, ValueError):
+            return False
 
     def _merge_split_domains(self, state: State) -> None:
         for key in SPLIT_STATE_KEYS:
@@ -139,10 +148,10 @@ class LocalStateStore:
         main_state = copy.deepcopy(state)
         for key in SPLIT_STATE_KEYS:
             split_payload = state.get(key, {})
-            self._write_json_atomic(
-                self._split_state_path(key),
-                split_payload if isinstance(split_payload, dict) else {},
-            )
+            normalized_payload = split_payload if isinstance(split_payload, dict) else {}
+            split_path = self._split_state_path(key)
+            if not self._json_payload_matches(split_path, normalized_payload):
+                self._write_json_atomic(split_path, normalized_payload)
             main_state[key] = {}
         self._write_json_atomic(self.path, main_state)
 

@@ -1,6 +1,9 @@
 import { useState } from "react";
 
-import type { NewsArticle, NewsDigest, UiLanguage } from "../../shared/types";
+import type { UiCopy } from "../../shared/i18n";
+import type { NewsArticle, NewsDigest } from "../../shared/types";
+
+type NewsDigestCopy = UiCopy["chat"]["newsDigest"];
 
 function articleDomain(article: NewsArticle): string {
   if (article.sourceDomain) {
@@ -75,30 +78,16 @@ function NewsKeyPoints({ articles }: { articles: NewsArticle[] }) {
 }
 
 export function NewsDigestView({
+  copy,
   digest,
-  language,
 }: {
+  copy: NewsDigestCopy;
   digest: NewsDigest;
-  language: UiLanguage;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const labels =
-    language === "ko"
-      ? {
-          additional: "나머지 기사 보기",
-          collapse: "나머지 기사 접기",
-          searchSources: "검색 출처",
-          warnings: "경고",
-        }
-      : {
-          additional: "Show more articles",
-          collapse: "Hide extra articles",
-          searchSources: "Search sources",
-          warnings: "Warnings",
-        };
   const toggleLabel = expanded
-    ? labels.collapse
-    : `${labels.additional} (${digest.additionalArticles.length})`;
+    ? copy.collapse
+    : `${copy.additional} (${digest.additionalArticles.length})`;
 
   return (
     <section
@@ -121,7 +110,7 @@ export function NewsDigestView({
         </>
       ) : null}
       <div className="news-digest-sources">
-        <strong>{labels.searchSources}</strong>
+        <strong>{copy.searchSources}</strong>
         <div>
           {digest.providerRuns.map((run) => (
             <span key={`${run.provider}:${run.query}`}>
@@ -131,7 +120,7 @@ export function NewsDigestView({
         </div>
         {digest.warnings.length ? (
           <p>
-            {labels.warnings}: {digest.warnings.join(", ")}
+            {copy.warnings}: {digest.warnings.join(", ")}
           </p>
         ) : null}
       </div>

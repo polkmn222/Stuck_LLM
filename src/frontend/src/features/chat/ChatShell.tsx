@@ -185,8 +185,8 @@ export function ChatShell({
                 <p>{message.content}</p>
                 {message.newsDigest ? (
                   <NewsDigestView
+                    copy={copy.newsDigest}
                     digest={message.newsDigest}
-                    language={responseLanguage}
                   />
                 ) : null}
                 {quote ? (

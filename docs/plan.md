@@ -192,6 +192,9 @@ prediction mode.
 
 ## Planned Build Phases
 
+- `phase_106`: News digest UI labels moved into the shared i18n copy boundary.
+- `phase_105`: Local state sidecar write optimization for unchanged cache/artifact domains.
+- `phase_104`: News digest prompt and LLM-output formatting extraction from `conversations/service.py`.
 - `phase_103`: Chat news digest component extraction from `ChatShell` with standalone frontend coverage.
 - `phase_102`: Backend E2E chat-to-prediction-analysis test slice for `/conversations` persistence and scoring.
 - `phase_101`: Centralized environment-backed external provider credential boundary for search/news/market-data keys.

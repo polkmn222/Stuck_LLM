@@ -36,6 +36,12 @@ export const uiCopy = {
       error: "Message could not be saved locally.",
       chartWindowError: "Chart range could not be loaded.",
       thinking: "Thinking...",
+      newsDigest: {
+        additional: "Show more articles",
+        collapse: "Hide extra articles",
+        searchSources: "Search sources",
+        warnings: "Warnings",
+      },
       activityItems: [
         "Checking LLM intent and provider response",
         "Resolving ticker and market data API",
@@ -194,6 +200,12 @@ export const uiCopy = {
       error: "메시지를 로컬에 저장하지 못했습니다.",
       chartWindowError: "그래프 기간을 불러오지 못했습니다.",
       thinking: "생각중...",
+      newsDigest: {
+        additional: "나머지 기사 보기",
+        collapse: "나머지 기사 접기",
+        searchSources: "검색 출처",
+        warnings: "경고",
+      },
       activityItems: [
         "LLM 의도와 제공자 응답 확인 중",
         "티커와 시장 데이터 API 확인 중",

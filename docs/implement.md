@@ -2,6 +2,70 @@
 
 Newest phases go first. Record concrete implementation notes, commands, validation, and unresolved risks for each phase.
 
+## phase_106 - News Digest i18n Label Boundary
+
+Status: completed
+
+Implementation notes:
+
+- Added English and Korean news digest labels under `uiCopy.<language>.chat.newsDigest`.
+- Updated `NewsDigestView` to accept localized copy from its parent instead of accepting `language` and maintaining internal label maps.
+- Updated `ChatShell` and the news digest component test to pass the localized copy explicitly.
+
+Validation:
+
+- RED: `cd src/frontend && npm test -- NewsDigestView.test.tsx` failed before implementation because the component still rendered its internal English label when passed the new copy prop shape.
+- GREEN: `cd src/frontend && npm test -- NewsDigestView.test.tsx` passed.
+- `cd src/frontend && npm run typecheck` passed.
+- `cd src/frontend && npm test` passed with 52 tests across 9 files.
+- `cd src/frontend && npm run build` passed.
+
+Risks and follow-ups:
+
+- This phase keeps visual output unchanged. Broader chat copy consolidation can continue as more extracted chat subcomponents appear.
+
+## phase_105 - Local State Sidecar Write Optimization
+
+Status: completed
+
+Implementation notes:
+
+- Added sidecar payload comparison before atomic replacement for `kv_cache`, `news_processing_runs`, and `prediction_artifacts`.
+- Changed atomic temp filenames to use the target path name, so concurrent sidecar writes no longer share the main state filename prefix.
+- Added mtime-based regression coverage proving unrelated sidecar files are not rewritten when only `kv_cache` changes.
+
+Validation:
+
+- RED setup: Added the mtime regression before implementation. The combined pre-implementation backend run stopped during `phase_104` collection because `conversations.news_digest_formatting` did not exist, before this test executed.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_local_state_store.py -q` passed.
+- `PYTHONPATH=src/backend python3 -m pytest src/backend/tests -q` passed with 164 tests and one local urllib3 LibreSSL warning.
+- `PYTHONPYCACHEPREFIX=/tmp/stuck_llm_pycache PYTHONPATH=src/backend python3 -m compileall -q src/backend/app src/backend/tests` passed.
+
+Risks and follow-ups:
+
+- Payload comparison reads existing sidecar JSON before writing. This is acceptable for the local JSON store; a future DB-backed store should rely on row-level upsert/update semantics instead.
+
+## phase_104 - Conversation News Digest Formatting Extraction
+
+Status: completed
+
+Implementation notes:
+
+- Added `conversations/news_digest_formatting.py` for news digest summary prompt construction, fenced JSON extraction, plain-text fallback handling, and article update mapping.
+- Updated `conversations/service.py` to call the extracted helpers while preserving the provider credential and live completion boundary in the service.
+- Added direct coverage for fenced JSON parsing, summary updates, Korean article labels, and unsupported category rejection.
+
+Validation:
+
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase104_news_digest_formatting.py src/backend/tests/test_local_state_store.py -q` failed before implementation because `conversations.news_digest_formatting` did not exist.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase104_news_digest_formatting.py src/backend/tests/test_local_state_store.py -q` passed with 5 tests.
+- `python3 -m ruff check src/backend/app src/backend/tests` passed.
+- `PYTHONPATH=src/backend python3 -m mypy src/backend/app/features/conversations/news_digest_formatting.py src/backend/app/features/conversations/service.py src/backend/app/shared/state_store.py` passed.
+
+Risks and follow-ups:
+
+- Full `PYTHONPATH=src/backend python3 -m mypy src/backend/app` is currently blocked by the pre-existing `src/backend/app/shared/stats_utils.py` pandas/statsmodels stub/import configuration, not by the files changed in this phase.
+
 ## phase_103 - Chat News Digest Component Split
 
 Status: completed
