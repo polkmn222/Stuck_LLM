@@ -44,6 +44,16 @@ STUCK_LLM_CORS_ORIGINS=http://127.0.0.1:5174,http://localhost:5174 ./run-all.sh
 - Frontend: `src/frontend`
 - Feature conventions: `src/README.md`
 
+## Documentation
+
+- Product behavior specs: `docs/product/README.md`
+- LLM agent contract: `docs/product/llm-agent-spec.md`
+- LLM agent phase roadmap: `docs/product/llm-agent-phase-roadmap.md`
+- Agent workflow docs: `docs/agent-workflows/`
+- Design system: `DESIGN.md`
+
+When new features or behavior changes affect documented agent behavior, UI rules, evidence rules, response shape, provider behavior, cache semantics, or runtime flow, ask before updating `docs/product/` unless the current request already includes that documentation update.
+
 ## Local MVP State
 
 The backend stores development settings and conversations in `.local/stuck_llm_state.json` by default. Override it with:

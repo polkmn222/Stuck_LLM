@@ -180,6 +180,7 @@ export interface ScoreResult {
   similarEventSampleCount: number;
   similarEventWinRate: number;
   similarEventMedianReturnPct: number;
+  confidenceFactors?: string[];
   drivers: ScoreDriver[];
   rationale: string;
 }
@@ -292,6 +293,7 @@ export interface EquityPoint {
 export interface BacktestResult {
   simulationId: string;
   analysisRequestId: string | null;
+  evaluationKind?: string;
   market: DefaultMarket;
   symbol: string;
   entryAt: string;

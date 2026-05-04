@@ -160,3 +160,118 @@ Important Notes
 
 Next Steps
 - Update the matching range README whenever a new 10-phase summary file is added.
+
+## phase_108 - LLM Agent Product Spec Documentation
+
+Phase Goal
+- Create durable product documentation for how the user-facing LLM stock-analysis agent should operate.
+
+Completed Work
+- Added `docs/product/README.md` as the product documentation entry point.
+- Added `docs/product/llm-agent-spec.md` with user intents, runtime flow, evidence and `as_of_at` rules, response rules, UI workspace rules, provider and credential rules, cache rules, validation expectations, and maintenance policy.
+- Updated `README.md`, `AGENTS.md`, and `docs/agent-workflows/` so agents can find the product behavior contract before changing related features.
+- Updated phase range indexes and compact summaries for `phase_108`.
+- Preserved modified non-backup files under `backups/phase_108/`.
+
+Changed Files
+- `AGENTS.md`
+- `README.md`
+- `docs/product/README.md`
+- `docs/product/llm-agent-spec.md`
+- `docs/agent-workflows/code-authoring.md`
+- `docs/agent-workflows/code-validation.md`
+- `docs/agent-workflows/orchestration.md`
+- `docs/plan/plan_101_200/README.md`
+- `docs/task/task_101_200/README.md`
+- `docs/implement/implement_101_200/README.md`
+- `docs/plan/plan_101_200/plan_101_110.md`
+- `docs/task/task_101_200/task_101_110.md`
+- `docs/implement/implement_101_200/implement_101_110.md`
+
+Validation
+- `rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs`: passed with no matches.
+- `wc -l AGENTS.md README.md docs/product/README.md docs/product/llm-agent-spec.md docs/agent-workflows/code-authoring.md docs/agent-workflows/code-validation.md docs/agent-workflows/orchestration.md docs/plan/plan_101_200/README.md docs/task/task_101_200/README.md docs/implement/implement_101_200/README.md docs/plan/plan_101_200/plan_101_110.md docs/task/task_101_200/task_101_110.md docs/implement/implement_101_200/implement_101_110.md`: completed; `AGENTS.md` was kept at 60 lines after compaction.
+- `git diff --check`: passed.
+
+Important Notes
+- This phase adds product-facing behavior documentation only; it does not change application code or runtime behavior.
+- Future changes that affect the product spec should ask the user before updating `docs/product/`, unless the current request already includes that documentation update.
+
+Next Steps
+- Keep `README.md`, `AGENTS.md`, and `docs/agent-workflows/` links current if product docs move or split.
+
+## phase_109 - Product Spec Detail And Roadmap
+
+Phase Goal
+- Make the LLM agent product contract explicit for news discovery, prediction, analysis boundaries, cache behavior, and PnL separation.
+
+Completed Work
+- Expanded `docs/product/llm-agent-spec.md` with `News Discovery Logic`, `Prediction Logic`, `Analysis Decision Boundaries`, and `Backtest And PnL Separation`.
+- Strengthened validation expectations for news query planning, provider fakes, dedupe, ranking, confidence, cache boundaries, and future-price exclusion.
+- Added `docs/product/llm-agent-phase-roadmap.md` with phases `phase_109` through `phase_118`.
+- Linked the roadmap from `docs/product/README.md` and `README.md`.
+- Preserved modified non-backup files under `backups/phase_109/`.
+
+Changed Files
+- `README.md`
+- `docs/product/README.md`
+- `docs/product/llm-agent-spec.md`
+- `docs/product/llm-agent-phase-roadmap.md`
+- `docs/plan/plan_101_200/README.md`
+- `docs/task/task_101_200/README.md`
+- `docs/implement/implement_101_200/README.md`
+- `docs/plan/plan_101_200/plan_101_110.md`
+- `docs/task/task_101_200/task_101_110.md`
+- `docs/implement/implement_101_200/implement_101_110.md`
+
+Validation
+- `rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs`: passed with no matches.
+- `wc -l AGENTS.md README.md docs/product/README.md docs/product/llm-agent-spec.md docs/product/llm-agent-phase-roadmap.md docs/plan/plan_101_200/README.md docs/task/task_101_200/README.md docs/implement/implement_101_200/README.md docs/plan/plan_101_200/plan_101_110.md docs/task/task_101_200/task_101_110.md docs/implement/implement_101_200/implement_101_110.md`: completed; `AGENTS.md` remains 60 lines.
+- `git diff --check`: passed.
+
+Important Notes
+- No application code changed in this phase.
+- The roadmap intentionally keeps later runtime changes atomic instead of combining news, evidence, prediction, UI, cache, PnL, and E2E implementation into one oversized phase.
+
+Next Steps
+- Begin `phase_110 - News Retrieval Pipeline` with backend unit tests before production code changes.
+
+## phase_110 - LLM Agent Contract Tests And News Category Boundary
+
+Phase Goal
+- Add executable contract tests for the product roadmap and make the first exposed news-category behavior match the documented product contract.
+
+Completed Work
+- Added `test_phase110_118_llm_agent_contract.py` with backend tests for:
+  - News query planning, URL canonicalization, dedupe, ranking, and category diversity.
+  - Prediction `as_of_at` future-source exclusion and prompt-context safety.
+  - Same-boundary prediction artifact reuse and horizon-based cache misses.
+  - Probability normalization, directional coherence, and confidence penalty for excluded sources.
+  - PnL/backtest storage separation from prediction artifacts and analysis requests.
+- Updated `news_digest.service._category_for_article` so product/device launch terms are categorized as `product_service` before broad service/core-business terms.
+- Preserved modified non-backup files under `backups/phase_110/`.
+
+Changed Files
+- `src/backend/app/features/news_digest/service.py`
+- `src/backend/tests/test_phase110_118_llm_agent_contract.py`
+- `docs/plan/plan_101_200/README.md`
+- `docs/task/task_101_200/README.md`
+- `docs/implement/implement_101_200/README.md`
+- `docs/plan/plan_101_200/plan_101_110.md`
+- `docs/task/task_101_200/task_101_110.md`
+- `docs/implement/implement_101_200/implement_101_110.md`
+
+Validation
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase110_118_llm_agent_contract.py -q` failed because product launch news was categorized as `core_business`.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase110_118_llm_agent_contract.py -q` passed with 5 tests.
+- Regression: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase064_069_news_digest.py src/backend/tests/test_phase077_prediction_probabilities.py src/backend/tests/test_phase095_prediction_artifact_store.py src/backend/tests/test_phase009_backtest.py src/backend/tests/test_phase110_118_llm_agent_contract.py -q` passed with 21 tests and one existing urllib3 LibreSSL warning.
+- Compile: `PYTHONPYCACHEPREFIX=/tmp/stuck_llm_pycache python3 -m compileall -q src/backend/app src/backend/tests` passed.
+- Docs: `rg -n "TO[D]O|TB[D]|FIX[M]E" AGENTS.md docs` passed with no matches.
+- Docs: `wc -l AGENTS.md README.md docs/product/README.md docs/product/llm-agent-spec.md docs/product/llm-agent-phase-roadmap.md docs/plan/plan_101_200/README.md docs/task/task_101_200/README.md docs/implement/implement_101_200/README.md docs/plan/plan_101_200/plan_101_110.md docs/task/task_101_200/task_101_110.md docs/implement/implement_101_200/implement_101_110.md` completed; `AGENTS.md` remains 60 lines.
+- Whitespace: `git diff --check` passed.
+
+Important Notes
+- This phase locks broad product-roadmap boundaries with focused tests; later phases can refactor internals against these tests.
+
+Next Steps
+- Continue with `phase_111 - Evidence Normalization` in the `111_120` summary bucket.

@@ -289,6 +289,8 @@ def _category_for_article(
         ),
     ):
         return "controversy"
+    if _contains_any_keyword(text, ("ipad", "mac", "arcade", "product", "launch")):
+        return "product_service"
     if _contains_any_keyword(
         text,
         (
@@ -305,8 +307,6 @@ def _category_for_article(
         return "core_business"
     if _contains_any_keyword(text, ("analyst", "wall street", "stock move", "target")):
         return "market_reaction"
-    if _contains_any_keyword(text, ("ipad", "mac", "arcade", "product", "launch")):
-        return "product_service"
     return "other"
 
 

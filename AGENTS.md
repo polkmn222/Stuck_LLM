@@ -2,8 +2,8 @@
 
 ## Project Status
 - Planning-stage repository for a conversational stock-analysis AI agent.
-- Read compact docs first: `docs/plan/README.md`, `docs/task/README.md`, and `docs/implement/README.md`.
-- Open `docs/plan/plan.md`, `docs/task/task.md`, and `docs/implement/implement.md` only when compact summaries are insufficient.
+- Read compact docs first: `docs/plan/README.md`, `docs/task/README.md`, and `docs/implement/README.md`; open full logs only when compact summaries are insufficient.
+- Product behavior specs live in `docs/product/README.md`; read them before changing LLM agent, evidence, response, UI, provider, or cache behavior.
 - Current docs use 100-phase folders with 10-phase summary files, for example `docs/implement/implement_101_200/implement_101_110.md`.
 
 ## Package Manager
@@ -37,6 +37,7 @@
 - Do not mix post-`as_of_at` evidence into historical LLM analysis.
 - Non-destructive installs, setup, and validation commands may run without extra user confirmation.
 - If code or policy changes require docs updates, ask first unless the current user request already includes those doc updates.
+- If new features or behavior changes affect `docs/product/`, ask the user before updating those specs unless the current request already includes the update.
 - If `docs/agent-workflows` no longer drives the requested behavior, proactively patch those workflow docs in the same phase.
 - Keep new implementation slices atomic under `src/backend/app/features/<feature>` and `src/frontend/src/features/<feature>`.
 - Every backend or frontend feature/behavior change must include unit tests in the same phase.

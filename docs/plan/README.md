@@ -7,7 +7,7 @@ Purpose
 Current Status
 - Detailed source plan: `docs/plan/plan.md`.
 - Compact range folders: `plan_001_100/` and `plan_101_200/`.
-- Latest compact range: `plan_101_200/plan_101_110.md`.
+- Latest compact range: `plan_101_200/plan_111_120.md`.
 
 Required Reading Order
 - Start with this file for documentation rules.

@@ -947,7 +947,7 @@ describe("ChatShell", () => {
     expect(screen.getByText("earnings")).toBeInTheDocument();
     expect(screen.getByText("businessinsider.com · tavily_news")).toBeInTheDocument();
     expect(screen.getByText("검색 출처")).toBeInTheDocument();
-    expect(screen.getByText("tavily_news: 2")).toBeInTheDocument();
+    expect(screen.getByText("tavily_news: completed · 2")).toBeInTheDocument();
     expect(screen.queryByText("Apple Arcade 게임 카탈로그 확대")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "나머지 기사 보기 (1)" }));

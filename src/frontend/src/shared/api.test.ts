@@ -530,6 +530,7 @@ describe("shared api", () => {
             similar_event_sample_count: 8,
             similar_event_win_rate: 62.5,
             similar_event_median_return_pct: 1.4,
+            confidence_factors: ["eligible_weight", "stance_diversity"],
             drivers: [
               {
                 source_document_id: "src_included",
@@ -588,6 +589,7 @@ describe("shared api", () => {
           holdProbability: 35.3,
           sellProbability: 11.8,
           confidenceScore: 0.74,
+          confidenceFactors: ["eligible_weight", "stance_diversity"],
           expectedReturnMinPct: -0.1,
           expectedReturnMaxPct: 3.4,
           downsideProbability: 11.8,
@@ -781,6 +783,7 @@ describe("shared api", () => {
             backtest_result: {
               simulation_id: "backtest_apple",
               analysis_request_id: null,
+              evaluation_kind: "pnl_simulation",
               market: "US",
               symbol: "AAPL",
               entry_at: "2026-04-01T16:00:00-04:00",
@@ -810,6 +813,7 @@ describe("shared api", () => {
         {
           backtestResult: {
             simulationId: "backtest_apple",
+            evaluationKind: "pnl_simulation",
             grossPnl: 17.15,
           },
         },
@@ -822,6 +826,7 @@ describe("shared api", () => {
       jsonResponse({
         simulation_id: "backtest_001",
         analysis_request_id: null,
+        evaluation_kind: "pnl_simulation",
         market: "KR",
         symbol: "005930",
         entry_at: "2026-04-22T15:30:00+09:00",
@@ -857,6 +862,7 @@ describe("shared api", () => {
     ).resolves.toEqual({
       simulationId: "backtest_001",
       analysisRequestId: null,
+      evaluationKind: "pnl_simulation",
       market: "KR",
       symbol: "005930",
       entryAt: "2026-04-22T15:30:00+09:00",

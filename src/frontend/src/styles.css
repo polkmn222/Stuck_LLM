@@ -601,6 +601,15 @@ h2 {
   padding: 2px 5px;
 }
 
+.news-card-date {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .news-card a,
 .news-card strong {
   color: var(--text);
@@ -1211,6 +1220,24 @@ h2 {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.analysis-operational-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.analysis-operational-state span {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  padding: 4px 6px;
+  font-size: 12px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
 }
 
 .source-audit {

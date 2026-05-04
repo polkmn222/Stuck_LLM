@@ -47,6 +47,8 @@ Record architecture decisions in the active compact plan summary first. Use `doc
 - Keep docs aligned with code and policy changes.
 - If the current user request already includes the needed docs change, update docs directly.
 - If a code or policy change implies additional docs updates outside the current request, ask before editing those docs.
+- Product behavior specs live under `docs/product/`; ask the user before updating them when a new feature or behavior change affects documented agent behavior, UI rules, evidence rules, response shape, provider behavior, cache semantics, or runtime flow, unless the current request already includes that documentation update.
+- Keep links from `README.md`, `AGENTS.md`, and `docs/agent-workflows/` current when product docs move or split.
 - Update the active task and implementation summaries for every phase-level implementation, installation, workflow, or policy change.
 - Use `docs/task/task.md` and `docs/implement/implement.md` only when the detailed source logs must be extended.
 - Back up every modified non-backup file under `backups/<phase_id>/`.
@@ -71,12 +73,14 @@ Record architecture decisions in the active compact plan summary first. Use `doc
 ### Frontend And UI
 
 - Use `frontend-design` whenever building or changing user-facing UI, including chat, settings, dashboards, analysis details, and PnL views.
+- Read `docs/product/llm-agent-spec.md` and `DESIGN.md` before changing the workspace UI contract.
 - Use `vercel-react-best-practices` when writing, reviewing, or refactoring React/Next.js components, pages, data fetching, performance, or bundle-sensitive code.
 - Use `web-design-guidelines` for UI audits, accessibility checks, forms, focus states, navigation state, responsive behavior, and UX review.
 - Use `shadcn` only when the project adopts shadcn/ui or has a `components.json` file.
 
 ### LLM Providers And AI Behavior
 
+- Read `docs/product/llm-agent-spec.md` before changing user-facing LLM agent behavior, response formats, evidence rules, provider behavior, cache semantics, or runtime flow.
 - Use `llm-application-dev` for prompt engineering, RAG patterns, provider abstraction, tool-calling design, hallucination reduction, and LLM app architecture.
 - Use `openai-docs` for current OpenAI API/model usage, model selection, structured outputs, tool calls, and migration guidance.
 - Use `provider-credentials` for BYOK provider setup, encrypted API-key storage, secret masking, credential deletion, and login-ready credential boundaries.

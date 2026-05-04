@@ -73,3 +73,4 @@ cd src/frontend && npm audit --audit-level=high
 - Rich market-data phases must test schema mapping and UI rendering for chart, key stats, and news when available.
 - AI capability or prompt-registry phases must expose provider support and prompt
   versions without returning API keys, decrypted credentials, or hidden prompt text.
+- Product spec changes must keep `README.md`, `AGENTS.md`, and `docs/agent-workflows/` links current when product docs move or split.

@@ -17,6 +17,7 @@ from app.features.analysis.live_provider import (
     UserLanguage,
     build_live_analysis_messages,
 )
+from app.features.analysis import evidence_normalization
 from app.features.analysis.schemas import (
     AnalysisRequestCommand,
     AnalysisResponse,
@@ -393,7 +394,7 @@ def _live_evidence_items(
                 stance=item.stance,
                 weight=round(item.weight, 2),
                 summary=item.summary,
-                quote_excerpt=_quote_excerpt(item.quote_excerpt),
+                quote_excerpt=evidence_normalization.quote_excerpt(item.quote_excerpt),
             )
         )
     return items
@@ -425,7 +426,7 @@ def _base_analysis_response(
         as_of_at=command.as_of_at,
         included_document_count=included_count,
         excluded_document_count=len(decisions) - included_count,
-        source_audit=_source_audit(
+        source_audit=evidence_normalization.source_audit(
             decisions,
             prompt_documents,
             command.source_warnings,
@@ -440,10 +441,13 @@ def _base_analysis_response(
 
 
 def create_analysis(store: LocalStateStore, command: AnalysisRequestCommand) -> AnalysisResponse:
-    decisions = _document_decisions(command.source_documents, command.as_of_at)
+    decisions = evidence_normalization.normalize_source_documents(
+        command.source_documents,
+        command.as_of_at,
+    )
     included_documents = [document for document in decisions if document.included_in_analysis]
-    evidence_items = _evidence_items(included_documents)
-    prompt_context = _prompt_context(included_documents)
+    evidence_items = evidence_normalization.evidence_items(included_documents)
+    prompt_context = evidence_normalization.prompt_context(included_documents)
     response = _base_analysis_response(
         command=command,
         decisions=decisions,
@@ -462,11 +466,17 @@ def create_live_analysis(
     provider: LlmAnalysisProvider,
     language: UserLanguage,
 ) -> AnalysisResponse:
-    decisions = _apply_live_prompt_budget(
-        _document_decisions(command.source_documents, command.as_of_at)
+    decisions = evidence_normalization.apply_live_prompt_budget(
+        evidence_normalization.normalize_source_documents(
+            command.source_documents,
+            command.as_of_at,
+        ),
+        max_source_documents=LIVE_MAX_SOURCE_DOCUMENTS,
+        max_prompt_context_chars=LIVE_MAX_PROMPT_CONTEXT_CHARS,
+        max_source_excerpt_chars=LIVE_MAX_SOURCE_EXCERPT_CHARS,
     )
     included_documents = [document for document in decisions if document.included_in_analysis]
-    prompt_context = _prompt_context(
+    prompt_context = evidence_normalization.prompt_context(
         included_documents,
         max_excerpt_chars=LIVE_MAX_SOURCE_EXCERPT_CHARS,
     )

@@ -7,7 +7,7 @@ Purpose
 Current Status
 - Detailed source log: `docs/task/task.md`.
 - Compact range folders: `task_001_100/` and `task_101_200/`.
-- Latest compact range: `task_101_200/task_101_110.md`.
+- Latest compact range: `task_101_200/task_111_120.md`.
 
 Required Reading Order
 - Start with this file for documentation rules.

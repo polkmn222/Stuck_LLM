@@ -46,6 +46,9 @@ function NewsArticleList({ articles }: { articles: NewsArticle[] }) {
               <span>{articleDomain(article)} · {article.provider}</span>
               <span>{article.category}</span>
             </div>
+            {article.publishedAt ? (
+              <p className="news-card-date">{article.publishedAt}</p>
+            ) : null}
             <strong>{article.headlineKo || article.title}</strong>
             {article.summaryKo || article.snippet ? (
               <p className="news-card-summary">{article.summaryKo || article.snippet}</p>
@@ -114,7 +117,7 @@ export function NewsDigestView({
         <div>
           {digest.providerRuns.map((run) => (
             <span key={`${run.provider}:${run.query}`}>
-              {run.provider}: {run.resultCount}
+              {run.provider}: {run.status} · {run.resultCount}
             </span>
           ))}
         </div>

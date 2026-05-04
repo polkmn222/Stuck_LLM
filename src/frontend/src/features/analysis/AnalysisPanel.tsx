@@ -163,6 +163,29 @@ function ProbabilitySummary({
         {`${formatProbability(score.similarEventWinRate)} win rate · `}
         {`${formatSignedPercent(score.similarEventMedianReturnPct)} median`}
       </p>
+      {score.confidenceFactors?.length ? (
+        <p>{`${copy.confidenceFactors}: ${score.confidenceFactors.join(", ")}`}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function OperationalState({
+  analysis,
+  copy,
+}: {
+  analysis: AnalysisResult | null | undefined;
+  copy: UiCopy["analysis"];
+}) {
+  if (!analysis || (!analysis.provider && !analysis.model)) {
+    return null;
+  }
+
+  return (
+    <div className="analysis-operational-state" aria-label="Analysis provider state">
+      {analysis.provider ? <span>{`${copy.provider}: ${analysis.provider}`}</span> : null}
+      {analysis.model ? <span>{`${copy.model}: ${analysis.model}`}</span> : null}
+      {analysis.providerErrorCode ? <span>{analysis.providerErrorCode}</span> : null}
     </div>
   );
 }
@@ -188,6 +211,8 @@ export function AnalysisPanel({ copy, snapshot }: AnalysisPanelProps) {
       </div>
 
       <ProbabilitySummary analysis={analysis} copy={copy} />
+
+      <OperationalState analysis={analysis} copy={copy} />
 
       <SourceAudit analysis={analysis} copy={copy} />
     </section>

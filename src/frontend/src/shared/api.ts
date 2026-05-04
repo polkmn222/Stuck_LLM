@@ -199,6 +199,7 @@ interface ApiScoreResult {
   similar_event_sample_count?: number;
   similar_event_win_rate?: number;
   similar_event_median_return_pct?: number;
+  confidence_factors?: string[];
   drivers: ApiScoreDriver[];
   rationale: string;
 }
@@ -233,6 +234,7 @@ interface ApiEquityPoint {
 interface ApiBacktestResult {
   simulation_id: string;
   analysis_request_id: string | null;
+  evaluation_kind?: string;
   market: DefaultMarket;
   symbol: string;
   entry_at: string;
@@ -408,6 +410,7 @@ function toScoreResult(result: ApiScoreResult): NonNullable<AnalysisResult["scor
     similarEventSampleCount: result.similar_event_sample_count ?? 0,
     similarEventWinRate: result.similar_event_win_rate ?? 0,
     similarEventMedianReturnPct: result.similar_event_median_return_pct ?? 0,
+    confidenceFactors: result.confidence_factors ?? [],
     drivers: result.drivers.map((driver) => ({
       sourceDocumentId: driver.source_document_id,
       stance: driver.stance,
@@ -533,6 +536,7 @@ function toBacktestResult(result: ApiBacktestResult): BacktestResult {
   return {
     simulationId: result.simulation_id,
     analysisRequestId: result.analysis_request_id,
+    evaluationKind: result.evaluation_kind ?? "pnl_simulation",
     market: result.market,
     symbol: result.symbol,
     entryAt: result.entry_at,

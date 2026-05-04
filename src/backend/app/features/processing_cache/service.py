@@ -13,6 +13,7 @@ from app.shared.state_store import LocalStateStore, State
 
 PROCESSING_CACHE_VERSION = "phase_093_v1"
 PREDICTION_ARTIFACT_VERSION = "phase_095_v1"
+PREDICTION_RESPONSE_SCHEMA_VERSION = "phase_116_prediction_response_v1"
 
 
 def _now() -> datetime:
@@ -228,6 +229,7 @@ def prediction_artifact_key(
             "model": model,
             "base_url": base_url,
             "prompt_version": prompt_version,
+            "response_schema_version": PREDICTION_RESPONSE_SCHEMA_VERSION,
             "evidence_hash": evidence_hash,
         },
     )
@@ -266,6 +268,7 @@ def store_prediction_artifact(
             "provider": provider,
             "model": model,
             "prompt_version": prompt_version,
+            "response_schema_version": PREDICTION_RESPONSE_SCHEMA_VERSION,
             "evidence_hash": evidence_hash,
             "summary": summary,
             "evidence_items": [dict(item) for item in evidence_items],

@@ -18,7 +18,19 @@ Phase Title Index
 - `phase_105 - Local State Sidecar Write Optimization` -> `plan_101_110.md`
 - `phase_106 - News Digest i18n Label Boundary` -> `plan_101_110.md`
 - `phase_107 - Documentation Compaction And Range Indexing` -> `plan_101_110.md`
+- `phase_108 - LLM Agent Product Spec Documentation` -> `plan_101_110.md`
+- `phase_109 - Product Spec Detail And Roadmap` -> `plan_101_110.md`
+- `phase_110 - LLM Agent Contract Tests And News Category Boundary` -> `plan_101_110.md`
+- `phase_111 - Evidence Normalization Boundary` -> `plan_111_120.md`
+- `phase_112 - Prediction Orchestration Routing Guard` -> `plan_111_120.md`
+- `phase_113 - Confidence Factor Scoring Metadata` -> `plan_111_120.md`
+- `phase_114 - Analysis UI Operational State` -> `plan_111_120.md`
+- `phase_115 - News Digest Transparency UX` -> `plan_111_120.md`
+- `phase_116 - Prediction Cache Schema Boundary` -> `plan_111_120.md`
+- `phase_117 - PnL Evaluation Artifact Separation` -> `plan_111_120.md`
+- `phase_118 - Conversation E2E Validation Matrix` -> `plan_111_120.md`
 
 Open Range
 - `plan_101_110.md` exists even though the range is not full yet.
+- `plan_111_120.md` exists even though the range is not full yet.
 - Add future summaries as `plan_111_120.md`, `plan_121_130.md`, and so on.

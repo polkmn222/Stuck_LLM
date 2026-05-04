@@ -114,6 +114,7 @@ def run_backtest(store: LocalStateStore, command: BacktestCommand) -> BacktestRe
     response = BacktestResponse(
         simulation_id=f"backtest_{uuid4().hex}",
         analysis_request_id=command.analysis_request_id,
+        evaluation_kind="pnl_simulation",
         market=command.market,
         symbol=_normalized_symbol(command.symbol),
         entry_at=command.entry_at,

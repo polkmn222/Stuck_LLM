@@ -68,6 +68,22 @@ def _confidence(items: List[ScoringEvidenceInput], excluded_document_count: int)
     return round(max(0.2, min(confidence, 0.95)), 2)
 
 
+def _confidence_factors(
+    items: List[ScoringEvidenceInput],
+    excluded_document_count: int,
+) -> List[str]:
+    factors = ["eligible_weight"] if items else []
+    stance_count = len({item.stance for item in items})
+    total_weight = sum(item.weight for item in items)
+    if len(items) <= 1 or total_weight < 0.7:
+        factors.append("thin_evidence")
+    if stance_count >= 2:
+        factors.append("stance_diversity")
+    if excluded_document_count > 0:
+        factors.append("excluded_source_penalty")
+    return factors
+
+
 def _expected_return_range(
     buy_probability: float,
     sell_probability: float,
@@ -129,6 +145,10 @@ def score_evidence(store: LocalStateStore, command: ScoreCommand) -> ScoreRespon
             similar_event_sample_count=sample_count,
             similar_event_win_rate=win_rate,
             similar_event_median_return_pct=median_return,
+            confidence_factors=_confidence_factors(
+                command.evidence_items,
+                command.excluded_document_count,
+            ),
             drivers=_drivers(command.evidence_items),
             rationale=(
                 "Probabilities are normalized from evidence stance weights with a hold baseline; "

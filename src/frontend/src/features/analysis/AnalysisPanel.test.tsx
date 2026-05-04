@@ -196,6 +196,8 @@ describe("AnalysisPanel", () => {
     expect(screen.getByText("1 included")).toBeInTheDocument();
     expect(screen.getByText("1 excluded")).toBeInTheDocument();
     expect(screen.getByText("missing_credential:naver_news")).toBeInTheDocument();
+    expect(screen.getByText("Provider: openai")).toBeInTheDocument();
+    expect(screen.getByText("Model: gpt-4.1-mini")).toBeInTheDocument();
     expect(screen.getByText("Demand improved before cutoff")).toBeInTheDocument();
     expect(screen.getByText("Future source")).toBeInTheDocument();
     expect(screen.getByText("Used in prompt")).toBeInTheDocument();
@@ -246,6 +248,7 @@ describe("AnalysisPanel", () => {
               similarEventSampleCount: 8,
               similarEventWinRate: 62.5,
               similarEventMedianReturnPct: 1.4,
+              confidenceFactors: ["eligible_weight", "stance_diversity"],
               drivers: [],
               rationale: "Normalized evidence weights.",
             },
@@ -264,6 +267,7 @@ describe("AnalysisPanel", () => {
     expect(screen.getByText("35.3%")).toBeInTheDocument();
     expect(screen.getByText("11.8%")).toBeInTheDocument();
     expect(screen.getByText("Confidence: 0.74")).toBeInTheDocument();
+    expect(screen.getByText("Confidence factors: eligible_weight, stance_diversity")).toBeInTheDocument();
     expect(screen.getByText(/Expected return: -0.1% to \+3.4%/)).toBeInTheDocument();
     expect(screen.getByText(/Downside risk: 11.8%/)).toBeInTheDocument();
     expect(screen.getByText(/Similar events: 8 samples/)).toBeInTheDocument();

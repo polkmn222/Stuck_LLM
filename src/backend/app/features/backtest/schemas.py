@@ -30,6 +30,7 @@ class EquityPoint(BaseModel):
 class BacktestResponse(BaseModel):
     simulation_id: str
     analysis_request_id: Optional[str]
+    evaluation_kind: str = "pnl_simulation"
     market: DefaultMarket
     symbol: str
     entry_at: str

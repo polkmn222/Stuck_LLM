@@ -43,5 +43,6 @@ class ScoreResponse(BaseModel):
     similar_event_sample_count: int = 0
     similar_event_win_rate: float = 0.0
     similar_event_median_return_pct: float = 0.0
+    confidence_factors: List[str] = Field(default_factory=list)
     drivers: List[ScoreDriver]
     rationale: str

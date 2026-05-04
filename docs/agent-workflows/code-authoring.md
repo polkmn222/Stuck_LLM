@@ -19,6 +19,8 @@ Use this workflow for all application code and phase-level documentation changes
 - Back up every modified non-backup file under `backups/<phase_id>/`.
 - Do not back up files already under `backups/`.
 - Write new Markdown content in English only.
+- Read `docs/product/README.md` and `docs/product/llm-agent-spec.md` before changing user-facing LLM agent behavior, evidence rules, response shape, provider behavior, cache semantics, runtime flow, or workspace UI rules.
+- Ask the user before updating `docs/product/` when a new feature or behavior change affects those product specs, unless the current request already includes the documentation update.
 - Place backend code under `src/backend`.
 - Place frontend code under `src/frontend`.
 - Keep feature slices atomic:
@@ -76,6 +78,7 @@ Use this workflow for all application code and phase-level documentation changes
 
 ## LLM Rules
 
+- Follow `docs/product/llm-agent-spec.md` as the product contract for user-facing LLM behavior.
 - LLM prompts must receive only eligible evidence for the selected `as_of_at`.
 - Responses must include buy, hold, sell probabilities plus confidence.
 - Evidence summaries must link back to stored source documents.

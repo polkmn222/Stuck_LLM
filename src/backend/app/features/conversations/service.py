@@ -1293,7 +1293,13 @@ def _build_response(
             messages=[*existing_messages, user_message, assistant_message],
         )
 
-    if snapshot_requested and quote is not None and not wants_analysis:
+    if (
+        snapshot_requested
+        and quote is not None
+        and not wants_analysis
+        and not wants_news
+        and not wants_pnl
+    ):
         assistant_message = _market_snapshot_reply(quote, language)
         return ConversationResponse(
             conversation_id=conversation_id,
