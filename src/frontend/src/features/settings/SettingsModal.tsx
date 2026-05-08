@@ -10,8 +10,11 @@ import {
 import type { UiCopy } from "../../shared/i18n";
 import type {
   CredentialProvider,
+  ExternalCredentialProvider,
+  ExternalCredentialStatus,
   LlmConnectionTestResult,
   LlmCredentialStatus,
+  SaveExternalCredentialRequest,
   SaveLlmCredentialRequest,
   UiPreferences,
 } from "../../shared/types";
@@ -19,12 +22,21 @@ import type {
 type SettingsTab = "general" | "model" | "security";
 
 interface SettingsModalProps {
+  activeCredentialId?: string | null;
   copy: UiCopy["settingsModal"];
+  credentialProfiles?: LlmCredentialStatus[];
   credentialStatus: LlmCredentialStatus;
+  externalCredentialProfiles?: ExternalCredentialStatus[];
   onClearConversations: () => Promise<number>;
   onClose: () => void;
   onDeleteCredential: () => Promise<LlmCredentialStatus>;
+  onDeleteExternalCredential?: (credentialId: string) => Promise<ExternalCredentialStatus>;
   onSaveCredential: (request: SaveLlmCredentialRequest) => Promise<LlmCredentialStatus>;
+  onSaveExternalCredential?: (
+    request: SaveExternalCredentialRequest,
+  ) => Promise<ExternalCredentialStatus>;
+  onSelectCredential?: (credentialId: string) => Promise<LlmCredentialStatus>;
+  onSelectExternalCredential?: (credentialId: string) => Promise<ExternalCredentialStatus>;
   onTestCredential: () => Promise<LlmConnectionTestResult>;
   onUiPreferencesChange: (preferences: UiPreferences) => void;
   uiPreferences: UiPreferences;
@@ -46,6 +58,12 @@ const DEFAULT_BASE_URL_BY_PROVIDER: Record<CredentialProvider, string> = {
 const MODEL_OPTIONS_BY_PROVIDER: Partial<Record<CredentialProvider, string[]>> = {
   cerebras: ["llama3.1-8b", "qwen-3-235b-a22b-instruct-2507"],
 };
+const NEWS_PROVIDER_OPTIONS: ExternalCredentialProvider[] = [
+  "tavily",
+  "gnews",
+  "serpapi",
+  "eventregistry",
+];
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
   "input:not([disabled])",
@@ -56,12 +74,19 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 export function SettingsModal({
+  activeCredentialId = null,
   copy,
+  credentialProfiles = [],
   credentialStatus,
+  externalCredentialProfiles = [],
   onClearConversations,
   onClose,
   onDeleteCredential,
+  onDeleteExternalCredential,
   onSaveCredential,
+  onSaveExternalCredential,
+  onSelectCredential,
+  onSelectExternalCredential,
   onTestCredential,
   onUiPreferencesChange,
   uiPreferences,
@@ -77,18 +102,24 @@ export function SettingsModal({
   );
   const [baseUrl, setBaseUrl] = useState(credentialStatus.baseUrl ?? "");
   const [apiKey, setApiKey] = useState("");
+  const [keyLabel, setKeyLabel] = useState(credentialStatus.label ?? "");
+  const [newsProvider, setNewsProvider] = useState<ExternalCredentialProvider>("tavily");
+  const [newsKeyLabel, setNewsKeyLabel] = useState("");
+  const [newsApiKey, setNewsApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<LlmConnectionTestResult | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isClearingConversations, setIsClearingConversations] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSavingExternal, setIsSavingExternal] = useState(false);
 
   useEffect(() => {
     const nextProvider = credentialStatus.provider ?? DEFAULT_PROVIDER;
     setProvider(nextProvider);
     setModel(credentialStatus.model ?? DEFAULT_MODEL_BY_PROVIDER[nextProvider]);
     setBaseUrl(credentialStatus.baseUrl ?? "");
+    setKeyLabel(credentialStatus.label ?? "");
     setTestResult(null);
   }, [credentialStatus]);
 
@@ -157,10 +188,13 @@ export function SettingsModal({
     setError(null);
     try {
       await onSaveCredential({
+        credentialId: `${provider}_${Date.now().toString(36)}`,
+        label: keyLabel.trim() || null,
         provider,
         model: trimmedModel || DEFAULT_MODEL_BY_PROVIDER[provider],
         baseUrl: baseUrl.trim() || null,
         apiKey: trimmedApiKey,
+        makeActive: true,
       });
       setApiKey("");
     } catch {
@@ -205,6 +239,79 @@ export function SettingsModal({
       setError(copy.deleteError);
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  async function handleSelectCredential(credentialId: string) {
+    if (!onSelectCredential) {
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    try {
+      await onSelectCredential(credentialId);
+    } catch {
+      setError(copy.selectKeyError);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSaveExternalCredential(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!onSaveExternalCredential) {
+      return;
+    }
+    const trimmedApiKey = newsApiKey.trim();
+    if (!trimmedApiKey) {
+      setError(copy.rawKeyRequired);
+      return;
+    }
+    setIsSavingExternal(true);
+    setError(null);
+    try {
+      await onSaveExternalCredential({
+        credentialId: `${newsProvider}_${Date.now().toString(36)}`,
+        label: newsKeyLabel.trim() || null,
+        provider: newsProvider,
+        apiKey: trimmedApiKey,
+        makeActive: true,
+      });
+      setNewsApiKey("");
+    } catch {
+      setError(copy.saveError);
+    } finally {
+      setIsSavingExternal(false);
+    }
+  }
+
+  async function handleSelectExternalCredential(credentialId: string) {
+    if (!onSelectExternalCredential) {
+      return;
+    }
+    setIsSavingExternal(true);
+    setError(null);
+    try {
+      await onSelectExternalCredential(credentialId);
+    } catch {
+      setError(copy.selectKeyError);
+    } finally {
+      setIsSavingExternal(false);
+    }
+  }
+
+  async function handleDeleteExternalCredential(credentialId: string) {
+    if (!onDeleteExternalCredential || !window.confirm(copy.deleteConfirm)) {
+      return;
+    }
+    setIsSavingExternal(true);
+    setError(null);
+    try {
+      await onDeleteExternalCredential(credentialId);
+    } catch {
+      setError(copy.deleteError);
+    } finally {
+      setIsSavingExternal(false);
     }
   }
 
@@ -347,7 +454,41 @@ export function SettingsModal({
                     <strong>{credentialStatus.apiKeyMask}</strong>
                   ) : null}
                 </div>
+                {credentialProfiles.length ? (
+                  <div className="credential-profile-list" aria-label={copy.savedKeys}>
+                    <span>{copy.savedKeys}</span>
+                    {credentialProfiles.map((profile) => (
+                      <button
+                        className={
+                          profile.credentialId === activeCredentialId ? "is-active" : ""
+                        }
+                        disabled={!profile.credentialId || isSaving}
+                        key={profile.credentialId ?? `${profile.provider}:${profile.model}`}
+                        onClick={() =>
+                          profile.credentialId
+                            ? void handleSelectCredential(profile.credentialId)
+                            : undefined
+                        }
+                        type="button"
+                      >
+                        <strong>{profile.label || profile.model || profile.provider}</strong>
+                        <span>{profile.apiKeyMask}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <form className="settings-form" onSubmit={handleSaveCredential}>
+                  <label className="field">
+                    <span>{copy.keyLabel}</span>
+                    <input
+                      aria-label={copy.keyLabel}
+                      autoComplete="off"
+                      name="key-label"
+                      onChange={(event) => setKeyLabel(event.target.value)}
+                      placeholder={copy.keyLabelPlaceholder}
+                      value={keyLabel}
+                    />
+                  </label>
                   <label className="field">
                     <span>{copy.provider}</span>
                     <select
@@ -450,6 +591,98 @@ export function SettingsModal({
                     <span>{testResult.message}</span>
                   </div>
                 ) : null}
+                <div className="settings-subsection">
+                  <div className="credential-status" aria-live="polite">
+                    <span>{copy.newsKeys}</span>
+                    <strong>{copy.newsKeyHint}</strong>
+                  </div>
+                  {externalCredentialProfiles.length ? (
+                    <div className="credential-profile-list" aria-label={copy.newsSavedKeys}>
+                      <span>{copy.newsSavedKeys}</span>
+                      {externalCredentialProfiles.map((profile) => (
+                        <button
+                          className={profile.isActive ? "is-active" : ""}
+                          disabled={!profile.credentialId || isSavingExternal}
+                          key={profile.credentialId ?? `${profile.provider}:${profile.apiKeyMask}`}
+                          onClick={() =>
+                            profile.credentialId
+                              ? void handleSelectExternalCredential(profile.credentialId)
+                              : undefined
+                          }
+                          type="button"
+                        >
+                          <strong>{profile.label || profile.provider}</strong>
+                          <span>{profile.apiKeyMask}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <form className="settings-form" onSubmit={handleSaveExternalCredential}>
+                    <label className="field">
+                      <span>{copy.newsKeyLabel}</span>
+                      <input
+                        aria-label={copy.newsKeyLabel}
+                        autoComplete="off"
+                        name="news-key-label"
+                        onChange={(event) => setNewsKeyLabel(event.target.value)}
+                        placeholder={copy.newsKeyLabelPlaceholder}
+                        value={newsKeyLabel}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{copy.newsProvider}</span>
+                      <select
+                        aria-label={copy.newsProvider}
+                        name="news-provider"
+                        onChange={(event) =>
+                          setNewsProvider(event.target.value as ExternalCredentialProvider)
+                        }
+                        value={newsProvider}
+                      >
+                        {NEWS_PROVIDER_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {copy.newsProviders[option]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>{copy.newsApiKey}</span>
+                      <input
+                        aria-label={copy.newsApiKey}
+                        autoComplete="off"
+                        name="news-api-key"
+                        onChange={(event) => setNewsApiKey(event.target.value)}
+                        placeholder={copy.newsApiKeyPlaceholder}
+                        spellCheck={false}
+                        type="password"
+                        value={newsApiKey}
+                      />
+                    </label>
+                    <div className="settings-actions">
+                      <button disabled={isSavingExternal} type="submit">
+                        {copy.saveNewsKey}
+                      </button>
+                      {externalCredentialProfiles
+                        .filter((profile) => profile.credentialId)
+                        .map((profile) => (
+                          <button
+                            className="secondary-action"
+                            disabled={isSavingExternal}
+                            key={`delete-${profile.credentialId}`}
+                            onClick={() =>
+                              profile.credentialId
+                                ? void handleDeleteExternalCredential(profile.credentialId)
+                                : undefined
+                            }
+                            type="button"
+                          >
+                            {copy.deleteNewsKey}
+                          </button>
+                        ))}
+                    </div>
+                  </form>
+                </div>
                 {error ? <p className="inline-error">{error}</p> : null}
               </section>
             ) : null}

@@ -59,6 +59,7 @@ class ConversationCommand(BaseModel):
     horizon_type: Optional[HorizonType] = None
     analysis_mode: Optional[AnalysisMode] = None
     response_language: Optional[ResponseLanguage] = None
+    llm_credential_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
 
 
 class ConversationResponse(BaseModel):

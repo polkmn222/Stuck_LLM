@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
-ExternalProvider = Literal["tavily", "gnews", "serpapi"]
+ExternalProvider = Literal["tavily", "gnews", "serpapi", "eventregistry"]
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,7 @@ def get_external_provider_credential(
         "tavily": "TAVILY_API_KEY",
         "gnews": "GNEWS_API_KEY",
         "serpapi": "SERPAPI_API_KEY",
+        "eventregistry": "EVENTREGISTRY_API_KEY",
     }
     api_key = _env_value(env_names[provider])
     if api_key is None:

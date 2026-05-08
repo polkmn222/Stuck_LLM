@@ -347,12 +347,33 @@ def test_news_digest_prioritizes_official_earnings_and_business_news_over_quote_
     assert ranked[0].category == "earnings"
     assert ranked[0].importance_score > ranked[-1].importance_score
     assert ranked[0].headline_ko == "Apple reports second quarter results"
-    assert ranked[0].summary_ko == "Apple reported quarterly revenue and services growth."
+    assert ranked[0].summary_ko is None
     assert ranked[-1].url == "https://finance.yahoo.com/quote/AAPL"
     assert ranked[-1].category == "quote_page"
     assert ranked[-1].importance_score < 0
     assert ranked[-1].snippet is not None
     assert len(ranked[-1].snippet) <= 260
+
+
+def test_news_article_does_not_seed_korean_summary_with_english_snippet() -> None:
+    from app.features.news_digest import service as news_digest_service
+
+    article = news_digest_service._article(
+        provider="tavily_news",
+        query="Apple intelligence news",
+        rank=0,
+        title="Apple Intelligence expands across devices",
+        url="https://www.apple.com/apple-intelligence/",
+        source="Apple",
+        snippet=(
+            "Apple Intelligence is for the everyday and deeply integrated "
+            "into iPhone, iPad, Mac, and Apple Vision Pro."
+        ),
+    )
+
+    assert article is not None
+    assert article.snippet is not None
+    assert article.summary_ko is None
 
 
 def test_news_digest_query_targets_news_instead_of_stock_price_pages() -> None:
@@ -571,6 +592,60 @@ def test_korean_news_request_returns_digest_without_horizon_and_uses_llm_summary
     assert provider.completion_requests
     assert provider.analysis_requests == []
     assert "sk-news-digest-secret" not in response.text
+
+
+def test_chat_news_digest_caps_provider_query_fanout_for_responsiveness(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from app.features.news_digest import service as news_digest_service
+
+    _clear_optional_news_provider_environment(monkeypatch)
+    monkeypatch.setenv("TAVILY_API_KEY", "tavily-phase125")
+    monkeypatch.setenv("GNEWS_API_KEY", "gnews-phase125")
+    monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-phase125")
+    fetch_calls: List[str] = []
+
+    def counting_news_fetch(url, *, headers=None, payload=None, timeout_seconds=10):
+        query_text = str(payload.get("query") if payload is not None else url)
+        fetch_calls.append(query_text)
+        return _news_payload_for_url(
+            url,
+            headers=headers,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+
+    monkeypatch.setattr(news_digest_service, "_fetch_json", counting_news_fetch)
+    monkeypatch.setattr(
+        market_data_service,
+        "_quote_from_serpapi_google_finance",
+        lambda symbol, window="1D": _apple_quote() if symbol == "AAPL" else None,
+        raising=False,
+    )
+
+    provider = NewsIntentSummaryProvider()
+    client = TestClient(
+        create_app(state_path=tmp_path / "state.json", llm_analysis_provider=provider)
+    )
+    _save_openai_credential(client, "sk-news-digest-phase125-secret")
+
+    response = client.post(
+        "/conversations",
+        json={
+            "content": "애플 뉴스 가져와줘",
+            "market": "KR",
+            "analysis_mode": "quick",
+            "response_language": "ko",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "news_digest"
+    assert body["news_digest"]["symbol"] == "AAPL"
+    assert 1 <= len(body["news_digest"]["provider_runs"]) <= 8
+    assert 1 <= len(fetch_calls) <= 8
 
 
 def test_korean_news_typo_routes_to_news_digest_without_llm_intent(

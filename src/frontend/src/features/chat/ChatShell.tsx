@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 
 import type {
   AppSettings,
   ConversationMessage,
   ConversationSnapshot,
+  LlmCredentialStatus,
   MarketChartWindow,
   MarketQuote,
   SendMessageRequest,
@@ -14,11 +15,14 @@ import { MarketChart } from "../analysis/MarketChart";
 import { NewsDigestView } from "./NewsDigestView";
 
 interface ChatShellProps {
+  activeCredentialId?: string | null;
   copy: UiCopy["chat"];
   conversationSnapshot?: ConversationSnapshot | null;
+  credentialProfiles?: LlmCredentialStatus[];
   settings: AppSettings;
   onAnalysisChange: (snapshot: ConversationSnapshot) => void;
   onConversationChange?: (snapshot: ConversationSnapshot) => void;
+  onCredentialChange?: (credentialId: string) => void;
   onFetchMarketQuote?: (
     market: MarketQuote["market"],
     symbol: string,
@@ -40,12 +44,49 @@ function messageClassName(message: ConversationMessage, needsApiKey: boolean): s
     .join(" ");
 }
 
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const linkPattern = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = linkPattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    nodes.push(
+      <a href={match[2]} key={`${match[2]}:${match.index}`} rel="noreferrer" target="_blank">
+        {match[1]}
+      </a>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+  return nodes;
+}
+
+function MessageContent({ content }: { content: string }) {
+  return (
+    <div className="message-content">
+      {content.split("\n").map((line, index) => (
+        <p className={line.startsWith("- ") ? "message-bullet-line" : undefined} key={index}>
+          {renderInlineMarkdown(line)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function ChatShell({
+  activeCredentialId = null,
   copy,
   conversationSnapshot = null,
+  credentialProfiles = [],
   settings,
   onAnalysisChange,
   onConversationChange,
+  onCredentialChange,
   onFetchMarketQuote,
   onSendMessage,
   responseLanguage,
@@ -60,13 +101,35 @@ export function ChatShell({
   const [chartErrorMessageId, setChartErrorMessageId] = useState<string | null>(null);
   const [latestSnapshot, setLatestSnapshot] = useState<ConversationSnapshot | null>(null);
   const [internalMessages, setInternalMessages] = useState<ConversationMessage[]>([]);
+  const [selectedCredentialId, setSelectedCredentialId] = useState<string | null>(
+    activeCredentialId,
+  );
   const activeSnapshot = conversationSnapshot ?? latestSnapshot;
   const messages = activeSnapshot?.messages ?? internalMessages;
   const activeConversationId = activeSnapshot?.conversationId ?? conversationId;
+  const selectedCredential = credentialProfiles.find(
+    (profile) => profile.credentialId === selectedCredentialId,
+  );
+  const selectedCredentialText = selectedCredential
+    ? `${selectedCredential.label || selectedCredential.provider || copy.unknownModelKey} · ${
+        selectedCredential.model || copy.unknownModelKey
+      }`
+    : null;
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView?.({ block: "end", behavior: "smooth" });
   }, [messages.length, isSending]);
+
+  useEffect(() => {
+    setSelectedCredentialId(activeCredentialId);
+  }, [activeCredentialId]);
+
+  function handleCredentialChange(nextCredentialId: string) {
+    setSelectedCredentialId(nextCredentialId || null);
+    if (nextCredentialId) {
+      onCredentialChange?.(nextCredentialId);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +149,7 @@ export function ChatShell({
         horizonType: settings.defaultHorizon,
         analysisMode: settings.analysisMode,
         responseLanguage,
+        llmCredentialId: selectedCredentialId,
       });
       setConversationId(snapshot.conversationId);
       setLatestSnapshot(snapshot);
@@ -155,9 +219,33 @@ export function ChatShell({
           <p className="eyebrow">{copy.eyebrow}</p>
           <h1>{copy.title}</h1>
         </div>
-        <span className="status-pill">
-          {settings.defaultMarket} / {settings.analysisMode}
-        </span>
+        <div className="chat-header-controls">
+          {credentialProfiles.length ? (
+            <label className="compact-select">
+              <span>{copy.modelKeyLabel}</span>
+              <select
+                aria-label={copy.modelKeyLabel}
+                onChange={(event) => handleCredentialChange(event.target.value)}
+                value={selectedCredentialId ?? ""}
+              >
+                {credentialProfiles.map((profile) => (
+                  <option
+                    key={profile.credentialId ?? `${profile.provider}:${profile.model}`}
+                    value={profile.credentialId ?? ""}
+                  >
+                    {profile.label || profile.model || profile.provider || copy.unknownModelKey}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {selectedCredentialText ? (
+            <span className="status-pill credential-pill">{selectedCredentialText}</span>
+          ) : null}
+          <span className="status-pill">
+            {settings.defaultMarket} / {settings.analysisMode}
+          </span>
+        </div>
       </header>
 
       <div className="message-list">
@@ -182,7 +270,7 @@ export function ChatShell({
                 key={message.id}
               >
                 <span>{message.meta}</span>
-                <p>{message.content}</p>
+                <MessageContent content={message.content} />
                 {message.newsDigest ? (
                   <NewsDigestView
                     copy={copy.newsDigest}

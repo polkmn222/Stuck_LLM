@@ -8,8 +8,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
-from pydantic import BaseModel
-
+from app.features.credentials.schemas import ExternalCredentialProvider
 from app.features.credentials.external_providers import (
     get_external_provider_credential,
     get_naver_search_credential,
@@ -20,10 +19,13 @@ from app.features.ingestion.schemas import (
     SourceCollectionCommand,
     SourceCollectionResponse,
 )
+from app.shared.datetime_utils import parse_optional_aware_datetime
+from app.shared.pydantic_compat import model_dump as _model_dump
 from app.shared.provider_status import record_provider_warning
 from app.shared.state_store import LocalStateStore, State
 
 DocumentSeed = Dict[str, Any]
+ExternalCredentialMap = Dict[ExternalCredentialProvider, str]
 DEFAULT_SOURCE_ADAPTERS: List[SourceAdapter] = [
     "naver_news",
     "tavily_news",
@@ -146,12 +148,6 @@ class MissingSourceCredentialError(Exception):
     pass
 
 
-def _model_dump(model: BaseModel) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return cast(Dict[str, Any], model.model_dump())
-    return cast(Dict[str, Any], model.dict())
-
-
 def _normalize_symbol(symbol: str) -> str:
     normalized = symbol.strip().upper()
     if normalized.endswith(".KS"):
@@ -179,11 +175,8 @@ def _normalize_published_at(value: Any, fallback: str) -> str:
             return parsed_rfc.isoformat()
     except (TypeError, ValueError, IndexError):
         pass
-    try:
-        parsed_iso = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return fallback
-    if parsed_iso.tzinfo is None:
+    parsed_iso = parse_optional_aware_datetime(text)
+    if parsed_iso is None:
         return fallback
     return parsed_iso.isoformat()
 
@@ -309,17 +302,31 @@ def _collect_naver_news(command: SourceCollectionCommand) -> List[CollectedSourc
         )
     return documents
 
-
-def _collect_tavily_news(command: SourceCollectionCommand) -> List[CollectedSourceDocument]:
-    credential = get_external_provider_credential("tavily")
+def _external_api_key(
+    provider: ExternalCredentialProvider,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> Optional[str]:
+    if external_credentials is not None:
+        return external_credentials.get(provider)
+    credential = get_external_provider_credential(provider)
     if credential is None:
+        return None
+    return credential.api_key
+
+
+def _collect_tavily_news(
+    command: SourceCollectionCommand,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[CollectedSourceDocument]:
+    api_key = _external_api_key("tavily", external_credentials)
+    if api_key is None:
         raise MissingSourceCredentialError
 
     limit = _document_limit(command.analysis_mode)
     payload = _fetch_json(
         "https://api.tavily.com/search",
         payload={
-            "api_key": credential.api_key,
+            "api_key": api_key,
             "query": _source_query(command),
             "search_depth": "basic",
             "max_results": limit,
@@ -352,9 +359,12 @@ def _collect_tavily_news(command: SourceCollectionCommand) -> List[CollectedSour
     return documents
 
 
-def _collect_gnews_news(command: SourceCollectionCommand) -> List[CollectedSourceDocument]:
-    credential = get_external_provider_credential("gnews")
-    if credential is None:
+def _collect_gnews_news(
+    command: SourceCollectionCommand,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[CollectedSourceDocument]:
+    api_key = _external_api_key("gnews", external_credentials)
+    if api_key is None:
         raise MissingSourceCredentialError
 
     limit = _document_limit(command.analysis_mode)
@@ -363,7 +373,7 @@ def _collect_gnews_news(command: SourceCollectionCommand) -> List[CollectedSourc
             "q": _source_query(command),
             "lang": "en",
             "max": str(limit),
-            "apikey": credential.api_key,
+            "apikey": api_key,
         }
     )
     payload = _fetch_json(f"https://gnews.io/api/v4/search?{query}")
@@ -426,9 +436,12 @@ def _serpapi_google_news_source_name(item: Dict[str, Any]) -> str:
     return source_name or "SerpApi Google News"
 
 
-def _collect_serpapi_google_news(command: SourceCollectionCommand) -> List[CollectedSourceDocument]:
-    credential = get_external_provider_credential("serpapi")
-    if credential is None:
+def _collect_serpapi_google_news(
+    command: SourceCollectionCommand,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[CollectedSourceDocument]:
+    api_key = _external_api_key("serpapi", external_credentials)
+    if api_key is None:
         raise MissingSourceCredentialError
 
     limit = _document_limit(command.analysis_mode)
@@ -438,7 +451,7 @@ def _collect_serpapi_google_news(command: SourceCollectionCommand) -> List[Colle
             "q": _source_query(command),
             "gl": "kr" if command.market == "KR" else "us",
             "hl": "ko" if command.market == "KR" else "en",
-            "api_key": credential.api_key,
+            "api_key": api_key,
         }
     )
     payload = _fetch_json(f"https://serpapi.com/search.json?{query}")
@@ -472,15 +485,16 @@ def _collect_serpapi_google_news(command: SourceCollectionCommand) -> List[Colle
 def _collect_external_adapter(
     adapter: SourceAdapter,
     command: SourceCollectionCommand,
+    external_credentials: Optional[ExternalCredentialMap],
 ) -> List[CollectedSourceDocument]:
     if adapter == "naver_news":
         return _collect_naver_news(command)
     if adapter == "tavily_news":
-        return _collect_tavily_news(command)
+        return _collect_tavily_news(command, external_credentials)
     if adapter == "gnews_news":
-        return _collect_gnews_news(command)
+        return _collect_gnews_news(command, external_credentials)
     if adapter == "serpapi_google_news":
-        return _collect_serpapi_google_news(command)
+        return _collect_serpapi_google_news(command, external_credentials)
     return []
 
 
@@ -516,6 +530,7 @@ def _collect_seeded_adapter(
 def collect_sources(
     store: LocalStateStore,
     command: SourceCollectionCommand,
+    external_credentials: Optional[ExternalCredentialMap] = None,
 ) -> SourceCollectionResponse:
     documents: List[CollectedSourceDocument] = []
     warnings: List[str] = []
@@ -528,7 +543,7 @@ def collect_sources(
 
         requested_seeded_only = False
         try:
-            documents.extend(_collect_external_adapter(adapter, command))
+            documents.extend(_collect_external_adapter(adapter, command, external_credentials))
         except MissingSourceCredentialError:
             record_provider_warning(warnings, "missing_credential", adapter)
         except AssertionError:

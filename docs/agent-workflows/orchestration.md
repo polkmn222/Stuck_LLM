@@ -73,14 +73,14 @@ Record architecture decisions in the active compact plan summary first. Use `doc
 ### Frontend And UI
 
 - Use `frontend-design` whenever building or changing user-facing UI, including chat, settings, dashboards, analysis details, and PnL views.
-- Read `docs/product/llm-agent-spec.md` and `DESIGN.md` before changing the workspace UI contract.
+- Read `docs/product/llm-agent-spec.md`, `docs/product/llm-runtime-execution.md`, and `DESIGN.md` before changing the workspace UI contract.
 - Use `vercel-react-best-practices` when writing, reviewing, or refactoring React/Next.js components, pages, data fetching, performance, or bundle-sensitive code.
 - Use `web-design-guidelines` for UI audits, accessibility checks, forms, focus states, navigation state, responsive behavior, and UX review.
 - Use `shadcn` only when the project adopts shadcn/ui or has a `components.json` file.
 
 ### LLM Providers And AI Behavior
 
-- Read `docs/product/llm-agent-spec.md` before changing user-facing LLM agent behavior, response formats, evidence rules, provider behavior, cache semantics, or runtime flow.
+- Read `docs/product/llm-agent-spec.md` and `docs/product/llm-runtime-execution.md` before changing user-facing LLM agent behavior, response formats, evidence rules, provider behavior, cache semantics, runtime flow, news execution, prediction execution, chart data, graph data, or artifacts.
 - Use `llm-application-dev` for prompt engineering, RAG patterns, provider abstraction, tool-calling design, hallucination reduction, and LLM app architecture.
 - Use `openai-docs` for current OpenAI API/model usage, model selection, structured outputs, tool calls, and migration guidance.
 - Use `provider-credentials` for BYOK provider setup, encrypted API-key storage, secret masking, credential deletion, and login-ready credential boundaries.
@@ -106,7 +106,9 @@ Record architecture decisions in the active compact plan summary first. Use `doc
 - Use `apify-ultimate-scraper` when a supported platform actor is a better fit for social, trend, Reddit, brand-monitoring, or structured extraction tasks.
 - Use `security-auditor` before implementing URL ingestion, arbitrary fetches, crawler execution, SSRF-sensitive endpoints, or handling third-party page content.
 - Use `systematic-debugging` for blocked crawlers, inconsistent extraction, source timestamp errors, flaky browser automation, or API failures.
-- Keep LLM provider keys separate from search/news/market-data keys such as `SERPAPI_API_KEY`, `NAVER_CLIENT_ID`, `TAVILY_API_KEY`, and `GNEWS_API_KEY`.
+- Keep LLM provider keys separate from search/news/market-data keys such as `SERPAPI_API_KEY`, `NAVER_CLIENT_ID`, `TAVILY_API_KEY`, `GNEWS_API_KEY`, and `EVENTREGISTRY_API_KEY`.
+- Resolve user-selected saved external credentials before any local-development environment fallback when calling Tavily, GNews, SerpApi, or EventRegistry providers.
+- Treat environment-based external credentials as local-development compatibility only; hosted-mode behavior must not rely on stray shell environment keys.
 - When users expect a Google Finance-style result, expand the snapshot schema and UI for chart, key stats, news, and related data instead of stopping at the minimal `MarketQuote`.
 
 ### Historical Evidence And Scoring

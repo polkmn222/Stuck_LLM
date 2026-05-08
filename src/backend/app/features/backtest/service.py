@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
-from pydantic import BaseModel
-
 from app.features.backtest.schemas import BacktestCommand, BacktestResponse, EquityPoint
+from app.shared.datetime_utils import parse_aware_datetime
+from app.shared.pydantic_compat import model_dump as _model_dump
 from app.shared.state_store import LocalStateStore, State
 
 PriceBar = Dict[str, float]
@@ -31,20 +31,15 @@ class BacktestError(ValueError):
     pass
 
 
-def _model_dump(model: BaseModel) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return cast(Dict[str, Any], model.model_dump())
-    return cast(Dict[str, Any], model.dict())
-
-
 def _parse_datetime(value: str) -> datetime:
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parse_aware_datetime(
+            value,
+            error_message="timestamps must be valid ISO 8601 values",
+            timezone_error_message="timestamps must include a timezone offset",
+        )
     except ValueError as error:
-        raise BacktestError("timestamps must be valid ISO 8601 values") from error
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise BacktestError("timestamps must include a timezone offset")
-    return parsed
+        raise BacktestError(str(error)) from error
 
 
 def _normalized_symbol(symbol: str) -> str:

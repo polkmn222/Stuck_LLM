@@ -9,20 +9,24 @@ import type {
   ConversationSummary,
   DefaultMarket,
   LlmConnectionTestResult,
+  LlmCredentialProfileList,
   LlmCredentialStatus,
   MarketChartWindow,
   NewsArticle,
   NewsCategory,
+  EvaluationKind,
+  ExternalCredentialProfileList,
+  ExternalCredentialStatus,
   NewsDigest,
   NewsProvider,
   NewsSearchRun,
   MarketQuote,
+  SaveExternalCredentialRequest,
   SaveLlmCredentialRequest,
   SendMessageRequest,
 } from "./types";
 
 interface ApiSettings {
-  provider: AppSettings["provider"];
   analysis_mode: AppSettings["analysisMode"];
   default_market: AppSettings["defaultMarket"];
   default_horizon: AppSettings["defaultHorizon"];
@@ -234,7 +238,7 @@ interface ApiEquityPoint {
 interface ApiBacktestResult {
   simulation_id: string;
   analysis_request_id: string | null;
-  evaluation_kind?: string;
+  evaluation_kind: EvaluationKind;
   market: DefaultMarket;
   symbol: string;
   entry_at: string;
@@ -251,13 +255,21 @@ interface ApiBacktestResult {
 
 interface ApiLlmCredentialStatus {
   configured: boolean;
+  credential_id?: string | null;
+  label?: string | null;
   provider: LlmCredentialStatus["provider"];
   model: string | null;
   base_url: string | null;
   api_key_mask: string | null;
   key_source: string | null;
+  is_active?: boolean;
   created_at: string | null;
   updated_at: string | null;
+}
+
+interface ApiLlmCredentialProfileList {
+  active_credential_id: string | null;
+  credentials: ApiLlmCredentialStatus[];
 }
 
 interface ApiLlmConnectionTestResult {
@@ -271,7 +283,24 @@ interface ApiLlmConnectionTestResult {
   message: string;
 }
 
-const REQUEST_TIMEOUT_MS = 30_000;
+interface ApiExternalCredentialStatus {
+  configured: boolean;
+  credential_id?: string | null;
+  label?: string | null;
+  provider: ExternalCredentialStatus["provider"];
+  api_key_mask: string | null;
+  key_source: string | null;
+  is_active?: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+interface ApiExternalCredentialProfileList {
+  active_credential_ids: ExternalCredentialProfileList["activeCredentialIds"];
+  credentials: ApiExternalCredentialStatus[];
+}
+
+const REQUEST_TIMEOUT_MS = 120_000;
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -316,7 +345,6 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 function toSettings(settings: ApiSettings): AppSettings {
   return {
-    provider: settings.provider,
     analysisMode: settings.analysis_mode,
     defaultMarket: settings.default_market,
     defaultHorizon: settings.default_horizon,
@@ -325,7 +353,6 @@ function toSettings(settings: ApiSettings): AppSettings {
 
 function fromSettings(settings: AppSettings): ApiSettings {
   return {
-    provider: settings.provider,
     analysis_mode: settings.analysisMode,
     default_market: settings.defaultMarket,
     default_horizon: settings.defaultHorizon,
@@ -536,7 +563,7 @@ function toBacktestResult(result: ApiBacktestResult): BacktestResult {
   return {
     simulationId: result.simulation_id,
     analysisRequestId: result.analysis_request_id,
-    evaluationKind: result.evaluation_kind ?? "pnl_simulation",
+    evaluationKind: result.evaluation_kind,
     market: result.market,
     symbol: result.symbol,
     entryAt: result.entry_at,
@@ -560,13 +587,25 @@ function toBacktestResult(result: ApiBacktestResult): BacktestResult {
 function toLlmCredentialStatus(status: ApiLlmCredentialStatus): LlmCredentialStatus {
   return {
     configured: status.configured,
+    credentialId: status.credential_id ?? null,
+    label: status.label ?? null,
     provider: status.provider,
     model: status.model,
     baseUrl: status.base_url,
     apiKeyMask: status.api_key_mask,
     keySource: status.key_source,
+    isActive: status.is_active ?? false,
     createdAt: status.created_at,
     updatedAt: status.updated_at,
+  };
+}
+
+function toLlmCredentialProfileList(
+  response: ApiLlmCredentialProfileList,
+): LlmCredentialProfileList {
+  return {
+    activeCredentialId: response.active_credential_id,
+    credentials: response.credentials.map(toLlmCredentialStatus),
   };
 }
 
@@ -585,12 +624,50 @@ function toLlmConnectionTestResult(
   };
 }
 
+function toExternalCredentialStatus(
+  status: ApiExternalCredentialStatus,
+): ExternalCredentialStatus {
+  return {
+    configured: status.configured,
+    credentialId: status.credential_id ?? null,
+    label: status.label ?? null,
+    provider: status.provider,
+    apiKeyMask: status.api_key_mask,
+    keySource: status.key_source,
+    isActive: status.is_active ?? false,
+    createdAt: status.created_at,
+    updatedAt: status.updated_at,
+  };
+}
+
+function toExternalCredentialProfileList(
+  response: ApiExternalCredentialProfileList,
+): ExternalCredentialProfileList {
+  return {
+    activeCredentialIds: response.active_credential_ids ?? {},
+    credentials: response.credentials.map(toExternalCredentialStatus),
+  };
+}
+
 function fromLlmCredentialRequest(request: SaveLlmCredentialRequest) {
   return {
+    credential_id: request.credentialId,
+    label: request.label,
     provider: request.provider,
     model: request.model,
     base_url: request.baseUrl,
     api_key: request.apiKey,
+    make_active: request.makeActive ?? true,
+  };
+}
+
+function fromExternalCredentialRequest(request: SaveExternalCredentialRequest) {
+  return {
+    credential_id: request.credentialId,
+    label: request.label,
+    provider: request.provider,
+    api_key: request.apiKey,
+    make_active: request.makeActive ?? true,
   };
 }
 
@@ -666,6 +743,7 @@ export async function sendConversationMessage(
       horizon_type: request.horizonType,
       analysis_mode: request.analysisMode,
       response_language: request.responseLanguage,
+      llm_credential_id: request.llmCredentialId,
     }),
   });
 
@@ -692,6 +770,12 @@ export async function fetchLlmCredentialStatus(): Promise<LlmCredentialStatus> {
   return toLlmCredentialStatus(await requestJson<ApiLlmCredentialStatus>("/credentials/llm"));
 }
 
+export async function fetchLlmCredentialProfiles(): Promise<LlmCredentialProfileList> {
+  return toLlmCredentialProfileList(
+    await requestJson<ApiLlmCredentialProfileList>("/credentials/llm/profiles"),
+  );
+}
+
 export async function saveLlmCredential(
   request: SaveLlmCredentialRequest,
 ): Promise<LlmCredentialStatus> {
@@ -700,6 +784,19 @@ export async function saveLlmCredential(
       method: "PUT",
       body: JSON.stringify(fromLlmCredentialRequest(request)),
     }),
+  );
+}
+
+export async function selectLlmCredentialProfile(
+  credentialId: string,
+): Promise<LlmCredentialStatus> {
+  return toLlmCredentialStatus(
+    await requestJson<ApiLlmCredentialStatus>(
+      `/credentials/llm/profiles/${encodeURIComponent(credentialId)}/active`,
+      {
+        method: "PATCH",
+      },
+    ),
   );
 }
 
@@ -716,5 +813,48 @@ export async function testLlmCredential(): Promise<LlmConnectionTestResult> {
     await requestJson<ApiLlmConnectionTestResult>("/credentials/llm/test", {
       method: "POST",
     }),
+  );
+}
+
+export async function fetchExternalCredentialProfiles(): Promise<ExternalCredentialProfileList> {
+  return toExternalCredentialProfileList(
+    await requestJson<ApiExternalCredentialProfileList>("/credentials/external/profiles"),
+  );
+}
+
+export async function saveExternalCredential(
+  request: SaveExternalCredentialRequest,
+): Promise<ExternalCredentialStatus> {
+  return toExternalCredentialStatus(
+    await requestJson<ApiExternalCredentialStatus>("/credentials/external/profiles", {
+      method: "POST",
+      body: JSON.stringify(fromExternalCredentialRequest(request)),
+    }),
+  );
+}
+
+export async function selectExternalCredentialProfile(
+  credentialId: string,
+): Promise<ExternalCredentialStatus> {
+  return toExternalCredentialStatus(
+    await requestJson<ApiExternalCredentialStatus>(
+      `/credentials/external/profiles/${encodeURIComponent(credentialId)}/active`,
+      {
+        method: "PATCH",
+      },
+    ),
+  );
+}
+
+export async function deleteExternalCredentialProfile(
+  credentialId: string,
+): Promise<ExternalCredentialStatus> {
+  return toExternalCredentialStatus(
+    await requestJson<ApiExternalCredentialStatus>(
+      `/credentials/external/profiles/${encodeURIComponent(credentialId)}`,
+      {
+        method: "DELETE",
+      },
+    ),
   );
 }

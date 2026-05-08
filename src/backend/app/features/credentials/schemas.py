@@ -1,8 +1,9 @@
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 CredentialProvider = Literal["openai", "anthropic", "cerebras", "custom"]
+ExternalCredentialProvider = Literal["tavily", "gnews", "serpapi", "eventregistry"]
 LlmConnectionTestStatus = Literal["ok", "setup_needed", "provider_error"]
 
 CEREBRAS_DEFAULT_MODEL = "llama3.1-8b"
@@ -19,12 +20,15 @@ DEFAULT_BASE_URLS = {
 
 
 class LlmCredentialUpsert(BaseModel):
+    credential_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    label: Optional[str] = Field(default=None, max_length=120)
     provider: CredentialProvider
     model: str = Field(min_length=1, max_length=120)
     base_url: Optional[str] = Field(default=None, max_length=500)
     api_key: SecretStr = Field(min_length=1, max_length=4000)
+    make_active: bool = True
 
-    @field_validator("model", "base_url", mode="before")
+    @field_validator("credential_id", "label", "model", "base_url", mode="before")
     @classmethod
     def strip_optional_text(cls, value: object) -> object:
         if isinstance(value, str):
@@ -43,11 +47,14 @@ class LlmCredentialUpsert(BaseModel):
 
 class LlmCredentialStatus(BaseModel):
     configured: bool
+    credential_id: Optional[str] = None
+    label: Optional[str] = None
     provider: Optional[CredentialProvider] = None
     model: Optional[str] = None
     base_url: Optional[str] = None
     api_key_mask: Optional[str] = None
     key_source: Optional[str] = None
+    is_active: bool = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -64,7 +71,54 @@ class LlmConnectionTestResult(BaseModel):
 
 
 class LlmCredentialSecret(BaseModel):
+    credential_id: str
+    label: Optional[str] = None
     provider: CredentialProvider
     model: str
     base_url: str
     api_key: str
+
+
+class LlmCredentialListResponse(BaseModel):
+    active_credential_id: Optional[str]
+    credentials: List[LlmCredentialStatus]
+
+
+class ExternalCredentialUpsert(BaseModel):
+    credential_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    label: Optional[str] = Field(default=None, max_length=120)
+    provider: ExternalCredentialProvider
+    api_key: SecretStr = Field(min_length=1, max_length=4000)
+    make_active: bool = True
+
+    @field_validator("credential_id", "label", mode="before")
+    @classmethod
+    def strip_optional_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+
+class ExternalCredentialStatus(BaseModel):
+    configured: bool
+    credential_id: Optional[str] = None
+    label: Optional[str] = None
+    provider: Optional[ExternalCredentialProvider] = None
+    api_key_mask: Optional[str] = None
+    key_source: Optional[str] = None
+    is_active: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ExternalCredentialSecret(BaseModel):
+    credential_id: str
+    label: Optional[str] = None
+    provider: ExternalCredentialProvider
+    api_key: str
+
+
+class ExternalCredentialListResponse(BaseModel):
+    active_credential_ids: Dict[ExternalCredentialProvider, str]
+    credentials: List[ExternalCredentialStatus]

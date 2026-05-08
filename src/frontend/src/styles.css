@@ -38,6 +38,7 @@ button {
   --sidebar-bg: #17181a;
   --surface: #212326;
   --surface-raised: #2b2d31;
+  --surface-muted: #1b1c1f;
   --field-bg: #303236;
   --text: #f7f7f8;
   --muted: #b8bcc4;
@@ -64,6 +65,7 @@ button {
   --sidebar-bg: #ffffff;
   --surface: #ffffff;
   --surface-raised: #f0f1f3;
+  --surface-muted: #f6f7f8;
   --field-bg: #ffffff;
   --text: #202123;
   --muted: #5f6672;
@@ -396,6 +398,39 @@ button {
   padding: 14px 22px;
 }
 
+.chat-header-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.compact-select {
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.compact-select span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.compact-select select {
+  min-width: 0;
+  max-width: 220px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--muted);
@@ -434,6 +469,10 @@ h2 {
   text-transform: uppercase;
 }
 
+.credential-pill {
+  text-transform: none;
+}
+
 .message-list {
   display: flex;
   flex-direction: column;
@@ -466,6 +505,28 @@ h2 {
   margin: 0;
   color: var(--text);
   line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.message-content {
+  display: grid;
+  gap: 8px;
+}
+
+.message-content a {
+  color: var(--accent);
+  font-weight: 760;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.message-content a:hover {
+  text-decoration: underline;
+}
+
+.message-bullet-line {
+  padding-left: 14px;
+  text-indent: -14px;
 }
 
 .message-needs-api-key p {
@@ -598,6 +659,13 @@ h2 {
 .news-card-meta span:last-child {
   border: 1px solid var(--border);
   background: var(--surface);
+  padding: 2px 5px;
+}
+
+.news-card-meta .news-provider-badge {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
   padding: 2px 5px;
 }
 
@@ -775,6 +843,13 @@ h2 {
 .pnl-result {
   display: grid;
   gap: 12px;
+}
+
+.settings-subsection {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
 }
 
 .field {
@@ -1535,6 +1610,42 @@ h2 {
   color: var(--accent);
 }
 
+.credential-profile-list {
+  display: grid;
+  gap: 8px;
+}
+
+.credential-profile-list > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.credential-profile-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.credential-profile-list button.is-active {
+  border-color: var(--accent);
+  background: var(--field-bg);
+}
+
+.credential-profile-list button span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1639,6 +1750,11 @@ h2 {
     flex-direction: column;
   }
 
+  .chat-header-controls {
+    justify-content: space-between;
+    width: 100%;
+  }
+
   .workspace-page {
     min-height: 72vh;
     padding: 18px 12px;
@@ -1667,6 +1783,22 @@ h2 {
   .composer {
     grid-template-columns: 1fr;
     width: calc(100% - 24px);
+  }
+
+  .chat-header-controls,
+  .credential-profile-list button {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-header-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .compact-select,
+  .compact-select select {
+    width: 100%;
+    max-width: none;
   }
 
   .pnl-mini-grid,

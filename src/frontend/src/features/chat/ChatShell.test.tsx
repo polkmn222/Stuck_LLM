@@ -53,7 +53,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: null,
@@ -80,6 +79,7 @@ describe("ChatShell", () => {
       horizonType: null,
       analysisMode: "quick",
       responseLanguage: "ko",
+      llmCredentialId: null,
     });
     expect(onAnalysisChange).toHaveBeenCalledWith(expect.objectContaining({ status: "needs_input" }));
     expect(screen.getByLabelText("Message")).toHaveValue("");
@@ -98,7 +98,152 @@ describe("ChatShell", () => {
       horizonType: null,
       analysisMode: "quick",
       responseLanguage: "ko",
+      llmCredentialId: null,
     });
+  });
+
+  it("lets users select the LLM key used for the next chat request", async () => {
+    const onSendMessage = vi.fn().mockResolvedValue({
+      conversationId: "conv_llm_key",
+      status: "chat_completed",
+      missingInputs: [],
+      analysisRequest: null,
+      analysisResult: null,
+      marketSnapshot: null,
+      messages: [
+        {
+          id: "msg_user_key",
+          role: "user",
+          content: "애플 주가 예측",
+          meta: "US market / quick mode",
+          createdAt: "2026-05-06T00:00:00Z",
+        },
+        {
+          id: "msg_assistant_key",
+          role: "assistant",
+          content: "Selected key response.",
+          meta: "live analysis",
+          createdAt: "2026-05-06T00:00:01Z",
+        },
+      ],
+    });
+    const onCredentialChange = vi.fn();
+
+    render(
+      <ChatShell
+        activeCredentialId="cerebras_fast"
+        credentialProfiles={[
+          {
+            configured: true,
+            credentialId: "openai_research",
+            label: "OpenAI research",
+            provider: "openai",
+            model: "gpt-4.1-mini",
+            baseUrl: "https://api.openai.com/v1",
+            apiKeyMask: "sk-o...cret",
+            keySource: "generated_local",
+            isActive: false,
+            createdAt: "2026-05-06T09:00:00Z",
+            updatedAt: "2026-05-06T09:00:00Z",
+          },
+          {
+            configured: true,
+            credentialId: "cerebras_fast",
+            label: "Cerebras fast",
+            provider: "cerebras",
+            model: "llama3.1-8b",
+            baseUrl: "https://api.cerebras.ai/v1",
+            apiKeyMask: "csk-...cret",
+            keySource: "generated_local",
+            isActive: true,
+            createdAt: "2026-05-06T09:01:00Z",
+            updatedAt: "2026-05-06T09:01:00Z",
+          },
+        ]}
+        copy={uiCopy.ko.chat}
+        onAnalysisChange={vi.fn()}
+        onCredentialChange={onCredentialChange}
+        onSendMessage={onSendMessage}
+        responseLanguage="ko"
+        settings={{
+          analysisMode: "quick",
+          defaultMarket: "US",
+          defaultHorizon: "swing",
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("LLM key")).toHaveValue("cerebras_fast");
+    fireEvent.change(screen.getByLabelText("LLM key"), {
+      target: { value: "openai_research" },
+    });
+    expect(onCredentialChange).toHaveBeenCalledWith("openai_research");
+
+    fireEvent.change(screen.getByLabelText("메시지"), {
+      target: { value: "애플 주가 예측" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
+
+    await screen.findByText("Selected key response.");
+    expect(onSendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        llmCredentialId: "openai_research",
+      }),
+    );
+  });
+
+  it("shows the selected key badge and renders markdown links in assistant messages", () => {
+    render(
+      <ChatShell
+        activeCredentialId="cerebras_fast"
+        conversationSnapshot={{
+          conversationId: "conv_markdown",
+          status: "chat_completed",
+          missingInputs: [],
+          analysisRequest: null,
+          analysisResult: null,
+          marketSnapshot: null,
+          messages: [
+            {
+              id: "msg_assistant_markdown",
+              role: "assistant",
+              content:
+                "제품·서비스:\n- [Apple services headline](https://example.com/apple-services) (Example · seekingalpha_rss)",
+              meta: "뉴스 요약",
+              createdAt: "2026-05-06T00:00:00Z",
+            },
+          ],
+        }}
+        credentialProfiles={[
+          {
+            configured: true,
+            credentialId: "cerebras_fast",
+            label: "Cerebras fast",
+            provider: "cerebras",
+            model: "llama3.1-8b",
+            baseUrl: "https://api.cerebras.ai/v1",
+            apiKeyMask: "csk-...cret",
+            keySource: "generated_local",
+            isActive: true,
+            createdAt: "2026-05-06T09:01:00Z",
+            updatedAt: "2026-05-06T09:01:00Z",
+          },
+        ]}
+        copy={uiCopy.ko.chat}
+        onAnalysisChange={vi.fn()}
+        onSendMessage={vi.fn()}
+        responseLanguage="ko"
+        settings={{
+          analysisMode: "quick",
+          defaultMarket: "US",
+          defaultHorizon: "swing",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Cerebras fast · llama3.1-8b")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Apple services headline" });
+    expect(link).toHaveAttribute("href", "https://example.com/apple-services");
   });
 
   it("does not send blank messages", async () => {
@@ -107,7 +252,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: null,
@@ -122,6 +266,34 @@ describe("ChatShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSendMessage).not.toHaveBeenCalled());
+  });
+
+  it("shows Korean request failure copy without implying a local save failure", async () => {
+    const onSendMessage = vi.fn().mockRejectedValue(new Error("Request timed out."));
+
+    render(
+      <ChatShell
+        settings={{
+          analysisMode: "quick",
+          defaultMarket: "KR",
+          defaultHorizon: null,
+        }}
+        copy={uiCopy.ko.chat}
+        onAnalysisChange={vi.fn()}
+        onSendMessage={onSendMessage}
+        responseLanguage="ko"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("메시지"), {
+      target: { value: "애플 뉴스" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
+
+    expect(
+      await screen.findByText("요청을 완료하지 못했습니다. 잠시 후 다시 시도하세요."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("메시지를 로컬에 저장하지 못했습니다.")).not.toBeInTheDocument();
   });
 
   it("scrolls to the newest conversation content after a message update", async () => {
@@ -160,7 +332,6 @@ describe("ChatShell", () => {
       render(
         <ChatShell
           settings={{
-            provider: "openai",
             analysisMode: "quick",
             defaultMarket: "US",
             defaultHorizon: null,
@@ -227,7 +398,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "US",
           defaultHorizon: null,
@@ -290,7 +460,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: null,
@@ -364,7 +533,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: "swing",
@@ -418,7 +586,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: "swing",
@@ -515,7 +682,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: "swing",
@@ -631,7 +797,6 @@ describe("ChatShell", () => {
           ],
         }}
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "US",
           defaultHorizon: "swing",
@@ -740,7 +905,6 @@ describe("ChatShell", () => {
     render(
       <ChatShell
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "US",
           defaultHorizon: "swing",
@@ -920,7 +1084,6 @@ describe("ChatShell", () => {
           ],
         }}
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "US",
           defaultHorizon: "swing",
@@ -934,18 +1097,20 @@ describe("ChatShell", () => {
 
     expect(screen.getByLabelText("Apple Inc news digest")).toBeInTheDocument();
     expect(screen.getByText("애플 뉴스 핵심은 실적, AI 전략, 공급망입니다.")).toBeInTheDocument();
-    expect(screen.getAllByText("오늘 Q2 2026 실적 발표 예정")).toHaveLength(2);
+    expect(screen.getAllByText("오늘 Q2 2026 실적 발표 예정")).toHaveLength(1);
     expect(
       screen.getAllByText("애플은 장 마감 후 실적 컨퍼런스콜을 진행합니다."),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(
       screen.getByRole("link", {
-        name: "Apple earnings preview highlights services growth",
+        name: "오늘 Q2 2026 실적 발표 예정",
       }),
     ).toHaveAttribute("href", "https://example.com/apple-earnings");
-    expect(screen.getByAltText("businessinsider.com icon")).toBeInTheDocument();
+    expect(screen.queryByAltText("businessinsider.com icon")).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain("google.com/s2/favicons");
     expect(screen.getByText("earnings")).toBeInTheDocument();
-    expect(screen.getByText("businessinsider.com · tavily_news")).toBeInTheDocument();
+    expect(screen.getByText("businessinsider.com")).toBeInTheDocument();
+    expect(screen.getByText("tavily_news")).toBeInTheDocument();
     expect(screen.getByText("검색 출처")).toBeInTheDocument();
     expect(screen.getByText("tavily_news: completed · 2")).toBeInTheDocument();
     expect(screen.queryByText("Apple Arcade 게임 카탈로그 확대")).not.toBeInTheDocument();
@@ -954,7 +1119,7 @@ describe("ChatShell", () => {
 
     expect(screen.getByText("Apple Arcade 게임 카탈로그 확대")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Apple Arcade expands game catalog" }),
+      screen.getByRole("link", { name: "Apple Arcade 게임 카탈로그 확대" }),
     ).toHaveAttribute("href", "https://example.com/apple-arcade");
   });
 });

@@ -3,15 +3,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearConversations,
   deleteConversation,
+  deleteExternalCredentialProfile,
   deleteLlmCredential,
   fetchConversation,
   fetchConversations,
+  fetchExternalCredentialProfiles,
+  fetchLlmCredentialProfiles,
   fetchLlmCredentialStatus,
   fetchMarketQuote,
   fetchSettings,
   runBacktest,
+  saveExternalCredential,
   saveLlmCredential,
   saveSettings,
+  selectExternalCredentialProfile,
+  selectLlmCredentialProfile,
   sendConversationMessage,
   testLlmCredential,
 } from "./api";
@@ -34,7 +40,6 @@ describe("shared api", () => {
       .fn()
       .mockResolvedValueOnce(
         jsonResponse({
-          provider: "openai",
           analysis_mode: "quick",
           default_market: "KR",
           default_horizon: null,
@@ -42,7 +47,6 @@ describe("shared api", () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          provider: "claude",
           analysis_mode: "deep",
           default_market: "US",
           default_horizon: "swing",
@@ -51,20 +55,17 @@ describe("shared api", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(fetchSettings()).resolves.toEqual({
-      provider: "openai",
       analysisMode: "quick",
       defaultMarket: "KR",
       defaultHorizon: null,
     });
     await expect(
       saveSettings({
-        provider: "claude",
         analysisMode: "deep",
         defaultMarket: "US",
         defaultHorizon: "swing",
       }),
     ).resolves.toEqual({
-      provider: "claude",
       analysisMode: "deep",
       defaultMarket: "US",
       defaultHorizon: "swing",
@@ -75,7 +76,6 @@ describe("shared api", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({
-          provider: "claude",
           analysis_mode: "deep",
           default_market: "US",
           default_horizon: "swing",
@@ -127,11 +127,14 @@ describe("shared api", () => {
 
     await expect(fetchLlmCredentialStatus()).resolves.toEqual({
       configured: false,
+      credentialId: null,
+      label: null,
       provider: null,
       model: null,
       baseUrl: null,
       apiKeyMask: null,
       keySource: null,
+      isActive: false,
       createdAt: null,
       updatedAt: null,
     });
@@ -145,22 +148,28 @@ describe("shared api", () => {
       }),
     ).resolves.toEqual({
       configured: true,
+      credentialId: null,
+      label: null,
       provider: "openai",
       model: "gpt-4.1-mini",
       baseUrl: "https://api.openai.com/v1",
       apiKeyMask: "sk-...7890",
       keySource: "local_encrypted_state",
+      isActive: false,
       createdAt: "2026-04-27T12:00:00+09:00",
       updatedAt: "2026-04-27T12:00:00+09:00",
     });
 
     await expect(deleteLlmCredential()).resolves.toEqual({
       configured: false,
+      credentialId: null,
+      label: null,
       provider: null,
       model: null,
       baseUrl: null,
       apiKeyMask: null,
       keySource: null,
+      isActive: false,
       createdAt: null,
       updatedAt: null,
     });
@@ -170,10 +179,13 @@ describe("shared api", () => {
       method: "PUT",
       signal: expect.any(AbortSignal),
       body: JSON.stringify({
+        credential_id: undefined,
+        label: undefined,
         provider: "openai",
         model: "gpt-4.1-mini",
         base_url: null,
         api_key: "sk-live-secret-7890",
+        make_active: true,
       }),
     });
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/credentials/llm", {
@@ -214,6 +226,211 @@ describe("shared api", () => {
       method: "POST",
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it("maps LLM credential profiles and active profile selection", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          active_credential_id: "cerebras_fast",
+          credentials: [
+            {
+              configured: true,
+              credential_id: "openai_research",
+              label: "OpenAI research",
+              provider: "openai",
+              model: "gpt-4.1-mini",
+              base_url: "https://api.openai.com/v1",
+              api_key_mask: "sk-o...cret",
+              key_source: "generated_local",
+              is_active: false,
+              created_at: "2026-05-06T09:00:00Z",
+              updated_at: "2026-05-06T09:00:00Z",
+            },
+            {
+              configured: true,
+              credential_id: "cerebras_fast",
+              label: "Cerebras fast",
+              provider: "cerebras",
+              model: "llama3.1-8b",
+              base_url: "https://api.cerebras.ai/v1",
+              api_key_mask: "csk-...cret",
+              key_source: "generated_local",
+              is_active: true,
+              created_at: "2026-05-06T09:01:00Z",
+              updated_at: "2026-05-06T09:01:00Z",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configured: true,
+          credential_id: "openai_research",
+          label: "OpenAI research",
+          provider: "openai",
+          model: "gpt-4.1-mini",
+          base_url: "https://api.openai.com/v1",
+          api_key_mask: "sk-o...cret",
+          key_source: "generated_local",
+          is_active: true,
+          created_at: "2026-05-06T09:00:00Z",
+          updated_at: "2026-05-06T09:00:00Z",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchLlmCredentialProfiles()).resolves.toEqual({
+      activeCredentialId: "cerebras_fast",
+      credentials: [
+        expect.objectContaining({
+          credentialId: "openai_research",
+          label: "OpenAI research",
+          isActive: false,
+        }),
+        expect.objectContaining({
+          credentialId: "cerebras_fast",
+          label: "Cerebras fast",
+          isActive: true,
+        }),
+      ],
+    });
+    await expect(selectLlmCredentialProfile("openai_research")).resolves.toEqual(
+      expect.objectContaining({
+        credentialId: "openai_research",
+        isActive: true,
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/credentials/llm/profiles/openai_research/active", {
+      headers: expect.any(Headers),
+      method: "PATCH",
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("maps external provider credential profiles without raw key exposure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          active_credential_ids: { tavily: "tavily_selected" },
+          credentials: [
+            {
+              configured: true,
+              credential_id: "tavily_selected",
+              label: "Tavily selected",
+              provider: "tavily",
+              api_key_mask: "tvly...cret",
+              key_source: "local_encrypted_state",
+              is_active: true,
+              created_at: "2026-05-06T09:00:00Z",
+              updated_at: "2026-05-06T09:00:00Z",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configured: true,
+          credential_id: "eventregistry_selected",
+          label: "EventRegistry",
+          provider: "eventregistry",
+          api_key_mask: "evre...cret",
+          key_source: "local_encrypted_state",
+          is_active: true,
+          created_at: "2026-05-06T09:01:00Z",
+          updated_at: "2026-05-06T09:01:00Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configured: true,
+          credential_id: "eventregistry_selected",
+          label: "EventRegistry",
+          provider: "eventregistry",
+          api_key_mask: "evre...cret",
+          key_source: "local_encrypted_state",
+          is_active: true,
+          created_at: "2026-05-06T09:01:00Z",
+          updated_at: "2026-05-06T09:01:00Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configured: false,
+          credential_id: null,
+          label: null,
+          provider: null,
+          api_key_mask: null,
+          key_source: null,
+          is_active: false,
+          created_at: null,
+          updated_at: null,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchExternalCredentialProfiles()).resolves.toEqual({
+      activeCredentialIds: { tavily: "tavily_selected" },
+      credentials: [
+        expect.objectContaining({
+          credentialId: "tavily_selected",
+          provider: "tavily",
+          isActive: true,
+        }),
+      ],
+    });
+    await expect(
+      saveExternalCredential({
+        credentialId: "eventregistry_selected",
+        label: "EventRegistry",
+        provider: "eventregistry",
+        apiKey: "eventregistry-phase136-secret",
+        makeActive: true,
+      }),
+    ).resolves.toEqual(expect.objectContaining({
+      credentialId: "eventregistry_selected",
+      provider: "eventregistry",
+    }));
+    await expect(selectExternalCredentialProfile("eventregistry_selected")).resolves.toEqual(
+      expect.objectContaining({ credentialId: "eventregistry_selected", isActive: true }),
+    );
+    await expect(deleteExternalCredentialProfile("eventregistry_selected")).resolves.toEqual(
+      expect.objectContaining({ configured: false }),
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/credentials/external/profiles", {
+      headers: expect.any(Headers),
+      method: "POST",
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({
+        credential_id: "eventregistry_selected",
+        label: "EventRegistry",
+        provider: "eventregistry",
+        api_key: "eventregistry-phase136-secret",
+        make_active: true,
+      }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/credentials/external/profiles/eventregistry_selected/active",
+      {
+        headers: expect.any(Headers),
+        method: "PATCH",
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/credentials/external/profiles/eventregistry_selected",
+      {
+        headers: expect.any(Headers),
+        method: "DELETE",
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it("deletes one conversation or clears all conversations", async () => {
@@ -912,8 +1129,19 @@ describe("shared api", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const request = expect(fetchSettings()).rejects.toThrow("Request timed out.");
+    const requestPromise = fetchSettings();
+    let rejectedBeforeNewsWindow = false;
+    requestPromise.catch(() => {
+      rejectedBeforeNewsWindow = true;
+    });
+
     await vi.advanceTimersByTimeAsync(30_000);
+    await Promise.resolve();
+
+    expect(rejectedBeforeNewsWindow).toBe(false);
+
+    const request = expect(requestPromise).rejects.toThrow("Request timed out.");
+    await vi.advanceTimersByTimeAsync(90_000);
 
     await request;
     expect(fetchMock).toHaveBeenCalledWith(

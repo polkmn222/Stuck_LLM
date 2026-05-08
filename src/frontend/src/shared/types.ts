@@ -1,18 +1,27 @@
 export type AnalysisMode = "quick" | "deep";
 export type DefaultMarket = "KR" | "US";
 export type HorizonType = "intraday" | "swing" | "long_term";
-export type Provider = "openai" | "claude" | "gemini";
 export type CredentialProvider = "openai" | "anthropic" | "cerebras" | "custom";
+export type ExternalCredentialProvider = "tavily" | "gnews" | "serpapi" | "eventregistry";
 export type UiLanguage = "en" | "ko";
 export type UiTheme = "dark" | "light";
 export type MarketChartWindow = "1D" | "5D" | "1M" | "6M" | "YTD" | "1Y" | "5Y" | "MAX";
 export type NewsProvider =
+  | "seekingalpha_rss"
+  | "yahoo_finance_rss"
+  | "google_news_rss"
+  | "bing_news_rss"
+  | "eventregistry_news"
   | "tavily_news"
   | "naver_news"
   | "gnews_news"
   | "serpapi_google_news"
   | "serpapi_google_web"
-  | "serpapi_social_web";
+  | "serpapi_social_web"
+  | "reddit_public_search"
+  | "web_crawl"
+  | "reddit_crawl";
+export type EvaluationKind = "pnl_simulation";
 export type NewsCategory =
   | "official"
   | "earnings"
@@ -29,7 +38,6 @@ export interface UiPreferences {
 }
 
 export interface AppSettings {
-  provider: Provider;
   analysisMode: AnalysisMode;
   defaultMarket: DefaultMarket;
   defaultHorizon: HorizonType | null;
@@ -97,7 +105,7 @@ export interface NewsSearchRun {
   provider: NewsProvider;
   query: string;
   resultCount: number;
-  status: "completed" | "missing_credential" | "provider_error";
+  status: "completed" | "missing_credential" | "provider_error" | "partial_provider_error";
   warning: string | null;
 }
 
@@ -238,13 +246,21 @@ export interface ConversationSummary {
 
 export interface LlmCredentialStatus {
   configured: boolean;
+  credentialId: string | null;
+  label: string | null;
   provider: CredentialProvider | null;
   model: string | null;
   baseUrl: string | null;
   apiKeyMask: string | null;
   keySource: string | null;
+  isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+export interface LlmCredentialProfileList {
+  activeCredentialId: string | null;
+  credentials: LlmCredentialStatus[];
 }
 
 export interface LlmConnectionTestResult {
@@ -259,10 +275,38 @@ export interface LlmConnectionTestResult {
 }
 
 export interface SaveLlmCredentialRequest {
+  credentialId?: string | null;
+  label?: string | null;
   provider: CredentialProvider;
   model: string;
   baseUrl: string | null;
   apiKey: string;
+  makeActive?: boolean;
+}
+
+export interface ExternalCredentialStatus {
+  configured: boolean;
+  credentialId: string | null;
+  label: string | null;
+  provider: ExternalCredentialProvider | null;
+  apiKeyMask: string | null;
+  keySource: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ExternalCredentialProfileList {
+  activeCredentialIds: Partial<Record<ExternalCredentialProvider, string>>;
+  credentials: ExternalCredentialStatus[];
+}
+
+export interface SaveExternalCredentialRequest {
+  credentialId?: string | null;
+  label?: string | null;
+  provider: ExternalCredentialProvider;
+  apiKey: string;
+  makeActive?: boolean;
 }
 
 export interface SendMessageRequest {
@@ -272,6 +316,7 @@ export interface SendMessageRequest {
   horizonType: HorizonType | null;
   analysisMode: AnalysisMode;
   responseLanguage: UiLanguage;
+  llmCredentialId?: string | null;
 }
 
 export interface BacktestRequest {
@@ -293,7 +338,7 @@ export interface EquityPoint {
 export interface BacktestResult {
   simulationId: string;
   analysisRequestId: string | null;
-  evaluationKind?: string;
+  evaluationKind: EvaluationKind;
   market: DefaultMarket;
   symbol: string;
   entryAt: string;

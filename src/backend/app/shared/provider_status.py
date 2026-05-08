@@ -1,12 +1,17 @@
 from typing import Literal, List, Optional
 
-ProviderRunStatus = Literal["completed", "missing_credential", "provider_error"]
+ProviderRunStatus = Literal[
+    "completed",
+    "missing_credential",
+    "provider_error",
+    "partial_provider_error",
+]
 
 
 def provider_warning(status: ProviderRunStatus, provider: str) -> Optional[str]:
     if status == "missing_credential":
         return f"missing_credential:{provider}"
-    if status == "provider_error":
+    if status in {"provider_error", "partial_provider_error"}:
         return f"provider_error:{provider}"
     return None
 

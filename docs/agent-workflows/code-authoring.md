@@ -19,7 +19,7 @@ Use this workflow for all application code and phase-level documentation changes
 - Back up every modified non-backup file under `backups/<phase_id>/`.
 - Do not back up files already under `backups/`.
 - Write new Markdown content in English only.
-- Read `docs/product/README.md` and `docs/product/llm-agent-spec.md` before changing user-facing LLM agent behavior, evidence rules, response shape, provider behavior, cache semantics, runtime flow, or workspace UI rules.
+- Read `docs/product/README.md`, `docs/product/llm-agent-spec.md`, and `docs/product/llm-runtime-execution.md` before changing user-facing LLM agent behavior, evidence rules, response shape, provider behavior, cache semantics, runtime flow, news execution, prediction execution, chart data, graph data, or workspace UI rules.
 - Ask the user before updating `docs/product/` when a new feature or behavior change affects those product specs, unless the current request already includes the documentation update.
 - Place backend code under `src/backend`.
 - Place frontend code under `src/frontend`.
@@ -36,6 +36,8 @@ Use this workflow for all application code and phase-level documentation changes
 - Enforce `analysis_requests.as_of_at` before LLM prompts or scoring.
 - Cache and processing records must be keyed by `symbol`, `intent` or provider
   operation, `as_of_at` where relevant, provider/model, and prompt/cache version.
+- Bump provider cache version strings whenever provider request shape, response
+  parsing, or query templates change; cache reuse must not cross such bumps.
 - Prefer adapters for external sources instead of embedding source-specific logic in analysis code.
 - Keep provider logic behind explicit OpenAI, Anthropic, and Gemini interfaces.
 
@@ -63,6 +65,7 @@ Use this workflow for all application code and phase-level documentation changes
 - Report failed sources in user-facing analysis results.
 - For market snapshots, model chart bars, key stats, and news explicitly when the provider returns them.
 - Do not use LLM credential storage for search/news/market-data keys.
+- Free RSS, EventRegistry, and Reddit public search providers must each be guarded by the external-credential boundary or by an explicit no-key activation rule (free RSS expands when no paid news key is selected; Reddit public search activates only on Reddit/community/sentiment-style requests).
 - Provider-response caches may store normalized payloads and provider status, but
   must never store API keys, decrypted credentials, hidden system prompts, or
   user secrets.
@@ -78,7 +81,7 @@ Use this workflow for all application code and phase-level documentation changes
 
 ## LLM Rules
 
-- Follow `docs/product/llm-agent-spec.md` as the product contract for user-facing LLM behavior.
+- Follow `docs/product/llm-agent-spec.md` as the product contract for user-facing LLM behavior and `docs/product/llm-runtime-execution.md` for news, prediction, chart, graph, cache, and artifact execution boundaries.
 - LLM prompts must receive only eligible evidence for the selected `as_of_at`.
 - Responses must include buy, hold, sell probabilities plus confidence.
 - Evidence summaries must link back to stored source documents.

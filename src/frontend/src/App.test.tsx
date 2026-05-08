@@ -5,15 +5,21 @@ import { App } from "./App";
 import {
   clearConversations,
   deleteConversation,
+  deleteExternalCredentialProfile,
   deleteLlmCredential,
   fetchConversation,
   fetchConversations,
+  fetchExternalCredentialProfiles,
+  fetchLlmCredentialProfiles,
   fetchLlmCredentialStatus,
   fetchMarketQuote,
   fetchSettings,
   runBacktest,
+  saveExternalCredential,
   saveLlmCredential,
   saveSettings,
+  selectExternalCredentialProfile,
+  selectLlmCredentialProfile,
   sendConversationMessage,
   testLlmCredential,
 } from "./shared/api";
@@ -22,21 +28,26 @@ import type { MarketQuote } from "./shared/types";
 vi.mock("./shared/api", () => ({
   clearConversations: vi.fn(),
   deleteConversation: vi.fn(),
+  deleteExternalCredentialProfile: vi.fn(),
   deleteLlmCredential: vi.fn(),
   fetchConversation: vi.fn(),
   fetchConversations: vi.fn(),
+  fetchExternalCredentialProfiles: vi.fn(),
+  fetchLlmCredentialProfiles: vi.fn(),
   fetchLlmCredentialStatus: vi.fn(),
   fetchMarketQuote: vi.fn(),
   fetchSettings: vi.fn(),
   runBacktest: vi.fn(),
+  saveExternalCredential: vi.fn(),
   saveLlmCredential: vi.fn(),
   saveSettings: vi.fn(),
+  selectExternalCredentialProfile: vi.fn(),
+  selectLlmCredentialProfile: vi.fn(),
   sendConversationMessage: vi.fn(),
   testLlmCredential: vi.fn(),
 }));
 
 const usSettings = {
-  provider: "openai",
   analysisMode: "quick",
   defaultMarket: "US",
   defaultHorizon: "swing",
@@ -61,14 +72,22 @@ const appleQuote: MarketQuote = {
 
 const emptyCredentialStatus = {
   configured: false,
+  credentialId: null,
+  label: null,
   provider: null,
   model: null,
   baseUrl: null,
   apiKeyMask: null,
   keySource: null,
+  isActive: false,
   createdAt: null,
   updatedAt: null,
 } as const;
+
+const emptyExternalCredentialProfiles = {
+  activeCredentialIds: {},
+  credentials: [],
+};
 
 function installMemoryStorage() {
   const store = new Map<string, string>();
@@ -102,9 +121,18 @@ describe("App", () => {
     vi.mocked(deleteConversation).mockResolvedValue(1);
     vi.mocked(clearConversations).mockResolvedValue(0);
     vi.mocked(fetchLlmCredentialStatus).mockResolvedValue(emptyCredentialStatus);
+    vi.mocked(fetchLlmCredentialProfiles).mockResolvedValue({
+      activeCredentialId: null,
+      credentials: [],
+    });
+    vi.mocked(fetchExternalCredentialProfiles).mockResolvedValue(emptyExternalCredentialProfiles);
     vi.mocked(fetchMarketQuote).mockResolvedValue(appleQuote);
     vi.mocked(saveLlmCredential).mockResolvedValue(emptyCredentialStatus);
     vi.mocked(deleteLlmCredential).mockResolvedValue(emptyCredentialStatus);
+    vi.mocked(selectLlmCredentialProfile).mockResolvedValue(emptyCredentialStatus);
+    vi.mocked(saveExternalCredential).mockReset();
+    vi.mocked(deleteExternalCredentialProfile).mockReset();
+    vi.mocked(selectExternalCredentialProfile).mockReset();
     vi.mocked(saveSettings).mockResolvedValue(usSettings);
     vi.mocked(sendConversationMessage).mockReset();
     vi.mocked(runBacktest).mockReset();
@@ -398,11 +426,14 @@ describe("App", () => {
   it("saves and deletes local LLM credentials from the model settings", async () => {
     const configuredStatus = {
       configured: true,
+      credentialId: "cerebras_fast",
+      label: "Cerebras fast",
       provider: "cerebras",
       model: "llama3.1-8b",
       baseUrl: "https://api.cerebras.ai/v1",
       apiKeyMask: "csk-...7890",
       keySource: "local_encrypted_state",
+      isActive: true,
       createdAt: "2026-04-27T12:00:00+09:00",
       updatedAt: "2026-04-27T12:00:00+09:00",
     } as const;
@@ -424,12 +455,13 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save API Key" }));
 
     await waitFor(() => {
-      expect(saveLlmCredential).toHaveBeenCalledWith({
+      expect(saveLlmCredential).toHaveBeenCalledWith(expect.objectContaining({
         provider: "cerebras",
         model: "llama3.1-8b",
         baseUrl: null,
         apiKey: "csk-live-secret-7890",
-      });
+        makeActive: true,
+      }));
     });
     expect(screen.getByText("csk-...7890")).toBeInTheDocument();
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Literal
 
 from app.features.analysis.schemas import SourceDocumentDecision
+from app.shared.datetime_utils import parse_aware_datetime
 
 SourceReliability = Literal["official", "news", "social", "unknown"]
 SourceFreshness = Literal["fresh", "stale", "future"]
@@ -58,13 +58,6 @@ class SourceQuality:
     warnings: list[str]
 
 
-def _parse_datetime(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        raise ValueError("Datetime must include a timezone offset.")
-    return parsed
-
-
 def _reliability(document: SourceDocumentDecision) -> SourceReliability:
     source_type = document.source_type.strip().lower()
     source_name = document.source_name.strip().lower()
@@ -78,8 +71,16 @@ def _reliability(document: SourceDocumentDecision) -> SourceReliability:
 
 
 def _freshness(document: SourceDocumentDecision, as_of_at: str) -> SourceFreshness:
-    published_at = _parse_datetime(document.published_at)
-    cutoff = _parse_datetime(as_of_at)
+    published_at = parse_aware_datetime(
+        document.published_at,
+        error_message="Datetime must be a valid ISO 8601 value.",
+        timezone_error_message="Datetime must include a timezone offset.",
+    )
+    cutoff = parse_aware_datetime(
+        as_of_at,
+        error_message="Datetime must be a valid ISO 8601 value.",
+        timezone_error_message="Datetime must include a timezone offset.",
+    )
     if published_at > cutoff:
         return "future"
     age_seconds = (cutoff - published_at).total_seconds()

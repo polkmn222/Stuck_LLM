@@ -5,7 +5,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { uiCopy } from "../../shared/i18n";
 
 describe("SettingsPanel", () => {
-  it("saves analysis defaults while preserving the selected provider route", () => {
+  it("saves analysis defaults", () => {
     const onSave = vi.fn();
 
     render(
@@ -14,7 +14,6 @@ describe("SettingsPanel", () => {
         isSaving={false}
         onSave={onSave}
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: null,
@@ -28,7 +27,6 @@ describe("SettingsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
 
     expect(onSave).toHaveBeenCalledWith({
-      provider: "openai",
       analysisMode: "deep",
       defaultMarket: "US",
       defaultHorizon: "swing",
@@ -43,7 +41,6 @@ describe("SettingsPanel", () => {
         isSaving={false}
         onSave={vi.fn()}
         settings={{
-          provider: "openai",
           analysisMode: "quick",
           defaultMarket: "KR",
           defaultHorizon: null,

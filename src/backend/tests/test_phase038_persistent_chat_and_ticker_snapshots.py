@@ -38,6 +38,17 @@ class SimpleChatProvider:
         raise AssertionError("Generic chat should not run stock analysis.")
 
 
+class HelpGuardProvider(SimpleChatProvider):
+    def interpret_chat(self, request: Any) -> Dict[str, Any]:
+        raise AssertionError("/help should be handled locally before provider intent calls.")
+
+    def complete_chat(self, request: Any) -> str:
+        raise AssertionError("/help should not call the chat provider.")
+
+    def analyze(self, request: LiveProviderRequest) -> LiveAnalysisOutput:
+        raise AssertionError("/help should not run stock analysis.")
+
+
 def _save_cerebras_credential(client: TestClient, raw_key: str) -> None:
     response = client.put(
         "/credentials/llm",
@@ -49,6 +60,76 @@ def _save_cerebras_credential(client: TestClient, raw_key: str) -> None:
         },
     )
     assert response.status_code == 200
+
+
+def test_help_command_returns_korean_capability_guide_without_provider_call(
+    tmp_path: Path,
+) -> None:
+    raw_key = "csk-phase123-help-secret"
+    provider = HelpGuardProvider()
+    client = TestClient(
+        create_app(
+            state_path=tmp_path / "state.json",
+            llm_analysis_provider=provider,
+        )
+    )
+    _save_cerebras_credential(client, raw_key)
+
+    response = client.post(
+        "/conversations",
+        json={
+            "content": "/help",
+            "market": "KR",
+            "analysis_mode": "quick",
+            "response_language": "ko",
+        },
+    )
+
+    assert response.status_code == 201
+    assert raw_key not in response.text
+    body = response.json()
+    assert body["status"] == "chat_completed"
+    assert body["analysis_request"] is None
+    assert body["analysis_result"] is None
+    assert body["messages"][-1]["meta"] == "도움말"
+    assert "/help" in body["messages"][-1]["content"]
+    assert "뉴스" in body["messages"][-1]["content"]
+    assert "예측" in body["messages"][-1]["content"]
+    assert "차트" in body["messages"][-1]["content"]
+    assert "설정" in body["messages"][-1]["content"]
+
+
+def test_help_command_does_not_require_saved_credentials(
+    tmp_path: Path,
+) -> None:
+    provider = HelpGuardProvider()
+    client = TestClient(
+        create_app(
+            state_path=tmp_path / "state.json",
+            llm_analysis_provider=provider,
+        )
+    )
+
+    response = client.post(
+        "/conversations",
+        json={
+            "content": "/도움말",
+            "market": "KR",
+            "analysis_mode": "quick",
+            "response_language": "ko",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "chat_completed"
+    assert body["analysis_request"] is None
+    assert body["analysis_result"] is None
+    assert body["messages"][-1]["meta"] == "도움말"
+    assert "사용 가능한 요청" in body["messages"][-1]["content"]
+    assert provider.intent_requests == []
+    assert provider.chat_requests == []
+    assert provider.analysis_requests == []
 
 
 def _serpapi_aapl_payload() -> Dict[str, Any]:

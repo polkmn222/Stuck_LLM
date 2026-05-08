@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -30,7 +30,7 @@ class EquityPoint(BaseModel):
 class BacktestResponse(BaseModel):
     simulation_id: str
     analysis_request_id: Optional[str]
-    evaluation_kind: str = "pnl_simulation"
+    evaluation_kind: Literal["pnl_simulation"] = "pnl_simulation"
     market: DefaultMarket
     symbol: str
     entry_at: str

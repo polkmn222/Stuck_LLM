@@ -1,7 +1,7 @@
 import os
 import re
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional, cast
+from typing import Dict, List, Literal, Optional, Tuple, cast
 from uuid import uuid4
 
 from app.features.analysis.live_provider import (
@@ -46,7 +46,11 @@ from app.features.conversations.schemas import (
     MissingInput,
     StockConfirmationSnapshot,
 )
-from app.features.credentials.service import get_llm_credential_secret
+from app.features.credentials.service import (
+    get_active_external_credential_secrets,
+    get_llm_credential_secret,
+)
+from app.features.credentials.schemas import ExternalCredentialProvider
 from app.features.ingestion.schemas import SourceAdapter, SourceCollectionCommand
 from app.features.ingestion.service import DEFAULT_SOURCE_ADAPTERS, collect_sources
 from app.features.market_data.schemas import MarketQuote
@@ -58,13 +62,14 @@ from app.features.market_data.service import (
     resolve_sp500_metadata_quote_from_text,
     resolve_quote_from_text,
 )
-from app.features.news_digest.schemas import NewsDigest
+from app.features.news_digest.schemas import NewsArticle, NewsDigest
 from app.features.news_digest.service import create_news_digest
 from app.features.scoring.schemas import ScoreCommand, ScoringEvidenceInput
 from app.features.scoring.service import score_evidence
 from app.features.settings.schemas import AnalysisMode, DefaultMarket, HorizonType, Settings
 from app.features.settings.service import get_settings
 from app.shared.credential_crypto import CredentialCipher
+from app.shared.datetime_utils import parse_optional_aware_datetime
 from app.shared.state_store import LocalStateStore, State
 
 UserLanguage = Literal["en", "ko"]
@@ -167,6 +172,8 @@ SOURCE_HINT_ADAPTER_KEYWORDS: tuple[tuple[SourceAdapter, tuple[str, ...]], ...] 
 )
 DEFAULT_USD_KRW_RATE = 1400.0
 DEFAULT_PREDICTION_HORIZON: HorizonType = "swing"
+CHAT_NEWS_QUERY_LIMIT = 2
+HELP_COMMANDS = {"/help", "/도움말"}
 
 
 def _recent_chat_context(
@@ -219,7 +226,7 @@ def _interpret_chat_intent(
     if intent_provider is None:
         return None
 
-    credential = get_llm_credential_secret(store, cipher)
+    credential = get_llm_credential_secret(store, cipher, command.llm_credential_id)
     if credential is None:
         return None
 
@@ -256,12 +263,13 @@ def _complete_simple_chat(
     content: str,
     existing_messages: List[ConversationMessage],
     language: UserLanguage,
+    credential_id: Optional[str],
 ) -> Optional[ConversationMessage]:
     chat_provider = _chat_completion_provider(provider)
     if chat_provider is None:
         return None
 
-    credential = get_llm_credential_secret(store, cipher)
+    credential = get_llm_credential_secret(store, cipher, credential_id)
     if credential is None:
         return None
 
@@ -303,6 +311,16 @@ def _complete_simple_chat(
     )
 
 
+def _selected_external_credentials(
+    store: LocalStateStore,
+    cipher: CredentialCipher,
+) -> Optional[Dict[ExternalCredentialProvider, str]]:
+    secrets = get_active_external_credential_secrets(store, cipher)
+    if not secrets:
+        return None
+    return {provider: secret.api_key for provider, secret in secrets.items()}
+
+
 def _source_adapters_from_hints(source_hints: List[str]) -> List[SourceAdapter]:
     selected: List[SourceAdapter] = []
 
@@ -315,6 +333,42 @@ def _source_adapters_from_hints(source_hints: List[str]) -> List[SourceAdapter]:
                 break
 
     return selected or list(DEFAULT_SOURCE_ADAPTERS)
+
+
+def _help_requested(content: str) -> bool:
+    return content.strip().lower() in HELP_COMMANDS
+
+
+def _help_reply(language: UserLanguage) -> ConversationMessage:
+    if language == "ko":
+        return _new_message(
+            "assistant",
+            (
+                "사용 가능한 요청입니다.\n"
+                "- /help: 이 도움말을 다시 봅니다.\n"
+                "- 종목 또는 티커: 애플, AAPL, 삼성전자처럼 입력하면 가격과 차트를 봅니다.\n"
+                "- 뉴스: 애플 뉴스, AAPL latest news처럼 입력하면 관련 기사 요약을 봅니다.\n"
+                "- 예측/분석: 애플 예측, 애플 스윙, 삼성전자 장기 분석처럼 입력하면 "
+                "적격 근거 기반 매수/보유/매도 확률을 계산합니다.\n"
+                "- 손익: 2026-04-01에 애플을 샀다면처럼 입력하면 별도 PnL 시뮬레이션을 봅니다.\n"
+                "- 설정: Settings의 Model에서 LLM provider와 API key를 저장할 수 있습니다."
+            ),
+            "도움말",
+        )
+    return _new_message(
+        "assistant",
+        (
+            "Available requests:\n"
+            "- /help: show this guide again.\n"
+            "- Stock or ticker: ask for Apple, AAPL, or Samsung Electronics to see price and charts.\n"
+            "- News: ask Apple news or AAPL latest news for a source-linked digest.\n"
+            "- Prediction/analysis: ask Apple prediction, AAPL swing, or Samsung long-term analysis "
+            "for evidence-based buy/hold/sell probabilities.\n"
+            "- PnL: ask what if I bought Apple on 2026-04-01 for a separate PnL simulation.\n"
+            "- Settings: save the LLM provider and API key in Settings > Model."
+        ),
+        "help",
+    )
 
 
 def _usd_krw_rate() -> float:
@@ -339,13 +393,7 @@ def _format_usd_krw_rate(rate: float) -> str:
 
 
 def _parse_optional_datetime(value: str) -> Optional[datetime]:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        return None
-    return parsed
+    return parse_optional_aware_datetime(value)
 
 
 def _price_text(quote: MarketQuote, language: UserLanguage) -> str:
@@ -422,6 +470,71 @@ def _market_data_source_document(quote: MarketQuote) -> SourceDocumentInput:
     )
 
 
+def _news_digest_source_documents(
+    digest: NewsDigest,
+    quote: MarketQuote,
+) -> List[SourceDocumentInput]:
+    documents: List[SourceDocumentInput] = []
+    quote_cutoff = _parse_optional_datetime(quote.as_of_at)
+
+    def fallback_timestamp(value: Optional[str]) -> Tuple[str, bool]:
+        parsed = _parse_optional_datetime(value or "")
+        if parsed is not None:
+            if quote_cutoff is not None and parsed > quote_cutoff:
+                return quote.as_of_at, True
+            return parsed.isoformat(), False
+        return quote.as_of_at, False
+
+    def article_timestamp(value: Optional[str]) -> Tuple[str, bool]:
+        parsed = _parse_optional_datetime(value or "")
+        if parsed is not None:
+            return parsed.isoformat(), False
+        return fallback_timestamp(digest.generated_at)
+
+    for article in digest.important_articles[:8]:
+        source_name = article.source or article.provider
+        snippet = article.summary_ko or article.snippet or article.title
+        published_at, timestamp_clamped = article_timestamp(article.published_at)
+        safety_flags = ["news_digest", "untrusted_source_text"]
+        if timestamp_clamped:
+            safety_flags.append("timestamp_clamped_to_quote_as_of")
+        documents.append(
+            SourceDocumentInput(
+                source_type="news",
+                source_name=source_name,
+                url=article.url,
+                title=article.title,
+                published_at=published_at,
+                fetched_at=fallback_timestamp(digest.generated_at)[0],
+                content_text=(
+                    f"Headline: {article.title}. Source: {source_name}. "
+                    f"Category: {article.category}. Summary: {snippet}"
+                ),
+                language="ko" if article.summary_ko else "en",
+                adapter=article.provider,
+                relevance_score=max(0.0, min(article.importance_score / 100.0, 1.0)),
+                safety_flags=safety_flags,
+            )
+        )
+    if not documents and digest.warnings:
+        documents.append(
+            SourceDocumentInput(
+                source_type="news",
+                source_name="News provider status",
+                url=None,
+                title=f"News retrieval warnings for {quote.name}",
+                published_at=quote.as_of_at,
+                fetched_at=digest.generated_at,
+                content_text="; ".join(digest.warnings),
+                language="en",
+                adapter="news_digest",
+                relevance_score=0.1,
+                safety_flags=["provider_status"],
+            )
+        )
+    return documents
+
+
 def _stock_confirmation_snapshot(
     candidate: QuoteConfirmationCandidate,
     source: Literal["fuzzy_alias", "llm_intent"],
@@ -476,6 +589,8 @@ def _llm_stock_candidate(
 def _evidence_summary_text(analysis_result: AnalysisResponse, language: UserLanguage) -> str:
     if not analysis_result.evidence_items:
         return ""
+    if analysis_result.provider_error_code == "malformed_output":
+        return ""
     evidence_summaries = "; ".join(
         item.summary for item in analysis_result.evidence_items[:3]
     )
@@ -493,9 +608,27 @@ def _score_summary_text(
     if score is None or score.status != "scored":
         return ""
     window = _prediction_window_text(horizon_type, language)
+    supportive = [
+        item.summary
+        for item in analysis_result.evidence_items
+        if item.stance == "bullish"
+    ][:2]
+    adverse = [
+        item.summary
+        for item in analysis_result.evidence_items
+        if item.stance == "bearish"
+    ][:2]
+    neutral = [
+        item.summary
+        for item in analysis_result.evidence_items
+        if item.stance == "neutral"
+    ][:2]
+    supportive_text = "; ".join(supportive or neutral or ["추가 확인 필요"])
+    adverse_text = "; ".join(adverse or neutral or ["뚜렷한 약세 근거 부족"])
     if language == "ko":
-        return (
-            f" {window} 기준 확률은 매수 {score.buy_probability:.1f}%, "
+        probability_text = (
+            f"기준 시각: {analysis_result.as_of_at}. "
+            f"{window} 기준 확률은 매수 {score.buy_probability:.1f}%, "
             f"보유 {score.hold_probability:.1f}%, 매도 {score.sell_probability:.1f}%입니다. "
             f"예상 수익률 범위는 {score.expected_return_min_pct:+.1f}%~"
             f"{score.expected_return_max_pct:+.1f}%, "
@@ -505,8 +638,18 @@ def _score_summary_text(
             f"중앙 수익률 {score.similar_event_median_return_pct:+.1f}%입니다. "
             f"신뢰도는 {score.confidence_score:.2f}입니다."
         )
+        return (
+            f"정보 기반 시나리오 분석입니다. {probability_text}\n"
+            f"기준 시나리오: 현재 근거 기준으로 보유/점진적 확인 관점이 중심입니다.\n"
+            f"강세 시나리오: {supportive_text}가 이어지면 매수 쪽 확률이 높아집니다.\n"
+            f"약세 시나리오: {adverse_text}가 커지면 밸류에이션 압축과 하락 위험을 우선 점검해야 합니다.\n"
+            "투자 조언이 아니라 제공된 근거 기반 시나리오 분석입니다."
+        )
+    supportive_text_en = "; ".join(supportive or neutral or ["more confirmation is needed"])
+    adverse_text_en = "; ".join(adverse or neutral or ["clear bearish evidence is limited"])
     return (
-        f" For {window}, probabilities are buy {score.buy_probability:.1f}%, "
+        f"Information-based scenario analysis. As of {analysis_result.as_of_at}, "
+        f"for {window}, probabilities are buy {score.buy_probability:.1f}%, "
         f"hold {score.hold_probability:.1f}%, sell {score.sell_probability:.1f}%. "
         f"Expected return range is {score.expected_return_min_pct:+.1f}% to "
         f"{score.expected_return_max_pct:+.1f}%, with downside risk "
@@ -514,8 +657,25 @@ def _score_summary_text(
         f"Similar-event baseline uses {score.similar_event_sample_count} samples, "
         f"{score.similar_event_win_rate:.1f}% win rate, and "
         f"{score.similar_event_median_return_pct:+.1f}% median return. "
-        f"Confidence is {score.confidence_score:.2f}."
+        f"Confidence is {score.confidence_score:.2f}.\n"
+        "Base scenario: hold or staged confirmation remains the center case from current evidence.\n"
+        f"Bull case: {supportive_text_en} would raise the buy-side probability.\n"
+        f"Bear case: {adverse_text_en} would put valuation compression and downside risk first.\n"
+        "This is information-based scenario analysis, not investment advice."
     )
+
+
+def _analysis_message_content(
+    analysis_result: AnalysisResponse,
+    horizon_type: HorizonType,
+    language: UserLanguage,
+) -> str:
+    content_lines = [
+        analysis_result.summary,
+        _score_summary_text(analysis_result, horizon_type, language).strip(),
+        _evidence_summary_text(analysis_result, language).strip(),
+    ]
+    return "\n\n".join(line for line in content_lines if line)
 
 
 def _analysis_keywords_requested(content: str) -> bool:
@@ -554,6 +714,18 @@ def _social_news_requested(content: str) -> bool:
 def _pnl_keywords_requested(content: str) -> bool:
     normalized = content.lower()
     return any(keyword in normalized for keyword in PNL_KEYWORDS)
+
+
+def _url_requested(content: str) -> bool:
+    return "http://" in content.lower() or "https://" in content.lower()
+
+
+def _analysis_news_context_requested(content: str) -> bool:
+    return (
+        _url_requested(content)
+        or _news_keywords_requested(content)
+        or _prediction_default_requested(content, None)
+    )
 
 
 def _market_close_timestamp_for_date(entry_date: datetime, market: DefaultMarket) -> str:
@@ -697,28 +869,112 @@ def _news_digest_reply(
     digest: NewsDigest,
     language: UserLanguage,
 ) -> ConversationMessage:
-    if language == "ko":
-        content = (
-            f"{quote.name} ({quote.symbol}) 관련 최신 뉴스 핵심 "
-            f"{len(digest.important_articles)}건을 정리했습니다. "
-            "출처와 링크는 아래 카드에서 확인할 수 있습니다."
-        )
-        return _new_message(
-            "assistant",
-            content,
-            "뉴스 요약",
-            news_digest=digest,
-        )
-    content = (
-        f"I summarized the top {len(digest.important_articles)} recent news item(s) "
-        f"for {quote.name} ({quote.symbol}). Links and search sources are shown below."
-    )
+    content = _news_digest_message_content(quote, digest, language)
     return _new_message(
         "assistant",
         content,
-        "news digest",
+        "뉴스 요약" if language == "ko" else "news digest",
         news_digest=digest,
     )
+
+
+def _news_section_key(article: NewsArticle) -> str:
+    if article.provider in {"reddit_crawl", "reddit_public_search"}:
+        return "community"
+    if article.category == "product_service":
+        return "product"
+    if article.category == "earnings":
+        return "earnings"
+    if article.category == "controversy":
+        return "regulation"
+    if article.category == "official":
+        return "official"
+    if article.category in {"core_business", "market_reaction"}:
+        return "business"
+    return "other"
+
+
+def _news_section_label(section_key: str, language: UserLanguage) -> str:
+    if language == "ko":
+        labels = {
+            "product": "제품·서비스",
+            "earnings": "실적·가이던스",
+            "regulation": "규제·소송",
+            "community": "커뮤니티·시장 반응",
+            "official": "공식 발표",
+            "business": "사업·전략",
+            "other": "기타",
+        }
+        return labels[section_key]
+    labels = {
+        "product": "Products/services",
+        "earnings": "Earnings/guidance",
+        "regulation": "Regulation/lawsuits",
+        "community": "Community/market reaction",
+        "official": "Official updates",
+        "business": "Business/strategy",
+        "other": "Other",
+    }
+    return labels[section_key]
+
+
+def _news_article_link(article: NewsArticle, language: UserLanguage) -> str:
+    title = article.headline_ko if language == "ko" and article.headline_ko else article.title
+    if not article.url:
+        return title
+    return f"[{title}]({article.url.rstrip('/')})"
+
+
+def _news_article_source_text(article: NewsArticle) -> str:
+    parts = [part for part in (article.source, article.provider, article.published_at) if part]
+    return " · ".join(parts)
+
+
+def _news_digest_message_content(
+    quote: MarketQuote,
+    digest: NewsDigest,
+    language: UserLanguage,
+) -> str:
+    grouped: Dict[str, List[NewsArticle]] = {}
+    for article in digest.important_articles[:6]:
+        grouped.setdefault(_news_section_key(article), []).append(article)
+
+    section_order = (
+        "product",
+        "earnings",
+        "regulation",
+        "community",
+        "official",
+        "business",
+        "other",
+    )
+    if language == "ko":
+        lines = [
+            f"{quote.name} ({quote.symbol}) 주요 뉴스입니다.",
+            f"{quote.as_of_at} 기준, 실제 headline과 출처 링크를 섹션별로 정리했습니다.",
+        ]
+    else:
+        lines = [
+            f"Here are the key news items for {quote.name} ({quote.symbol}).",
+            f"As of {quote.as_of_at}, I grouped actual headlines with source links.",
+        ]
+
+    for section_key in section_order:
+        articles = grouped.get(section_key, [])
+        if not articles:
+            continue
+        lines.append("")
+        lines.append(f"{_news_section_label(section_key, language)}:")
+        for article in articles:
+            source_text = _news_article_source_text(article)
+            suffix = f" ({source_text})" if source_text else ""
+            lines.append(f"- {_news_article_link(article, language)}{suffix}")
+
+    if digest.warnings:
+        warning_label = "경고" if language == "ko" else "Warnings"
+        lines.append("")
+        lines.append(f"{warning_label}: {', '.join(digest.warnings)}")
+    return "\n".join(lines)
 
 
 def _pnl_reply(
@@ -785,12 +1041,13 @@ def _complete_news_digest_summary(
     digest: NewsDigest,
     content: str,
     language: UserLanguage,
+    credential_id: Optional[str],
 ) -> NewsDigest:
     chat_provider = _chat_completion_provider(provider)
     if chat_provider is None or not digest.important_articles:
         return digest
 
-    credential = get_llm_credential_secret(store, cipher)
+    credential = get_llm_credential_secret(store, cipher, credential_id)
     if credential is None:
         return digest
 
@@ -927,21 +1184,13 @@ def _assistant_reply(
         if language == "ko":
             return _new_message(
                 role="assistant",
-                content=(
-                    f"{analysis_result.summary}"
-                    f"{_score_summary_text(analysis_result, horizon_type, language)}"
-                    f"{_evidence_summary_text(analysis_result, language)}"
-                ),
+                content=_analysis_message_content(analysis_result, horizon_type, language),
                 meta="라이브 분석",
                 market_snapshot=quote,
             )
         return _new_message(
             role="assistant",
-            content=(
-                f"{analysis_result.summary}"
-                f"{_score_summary_text(analysis_result, horizon_type, language)}"
-                f"{_evidence_summary_text(analysis_result, language)}"
-            ),
+            content=_analysis_message_content(analysis_result, horizon_type, language),
             meta="live analysis",
             market_snapshot=quote,
         )
@@ -1052,7 +1301,10 @@ def _create_chat_live_analysis(
     analysis_mode: AnalysisMode,
     language: UserLanguage,
     source_adapters: List[SourceAdapter],
+    credential_id: Optional[str],
+    requested_query: str,
 ) -> AnalysisResponse:
+    external_credentials = _selected_external_credentials(store, cipher)
     collection = collect_sources(
         store,
         SourceCollectionCommand(
@@ -1063,6 +1315,20 @@ def _create_chat_live_analysis(
             analysis_mode=analysis_mode,
             source_adapters=source_adapters,
         ),
+        external_credentials=external_credentials,
+    )
+    news_digest = (
+        create_news_digest(
+            quote,
+            requested_query=requested_query,
+            language=language,
+            store=store,
+            query_limit=CHAT_NEWS_QUERY_LIMIT,
+            important_limit=5,
+            external_credentials=external_credentials,
+        )
+        if _analysis_news_context_requested(requested_query)
+        else None
     )
     command = AnalysisRequestCommand(
         market=quote.market,
@@ -1076,6 +1342,7 @@ def _create_chat_live_analysis(
             SourceDocumentInput(**_model_dump(document))
             for document in collection.documents
         ]
+        + (_news_digest_source_documents(news_digest, quote) if news_digest else [])
         + [_market_data_source_document(quote)],
     )
     return create_live_analysis(
@@ -1084,6 +1351,7 @@ def _create_chat_live_analysis(
         command=command,
         provider=provider,
         language=language,
+        credential_id=credential_id,
     )
 
 
@@ -1120,6 +1388,25 @@ def _build_response(
 ) -> ConversationResponse:
     content = command.content.strip()
     language = _response_language(content, command.response_language)
+    if _help_requested(content):
+        market = command.market or settings.default_market
+        analysis_mode = command.analysis_mode or settings.analysis_mode
+        user_message = _new_message(
+            role="user",
+            content=content,
+            meta=f"{market} market / {analysis_mode} mode",
+        )
+        return ConversationResponse(
+            conversation_id=conversation_id,
+            status="chat_completed",
+            missing_inputs=[],
+            analysis_request=None,
+            analysis_result=None,
+            market_snapshot=None,
+            news_digest=None,
+            backtest_result=None,
+            messages=[*existing_messages, user_message, _help_reply(language)],
+        )
     parsed_horizon = _resolve_horizon_from_text(content)
     intent = _interpret_chat_intent(
         store,
@@ -1221,6 +1508,7 @@ def _build_response(
             content,
             existing_messages,
             language,
+            command.llm_credential_id,
         )
 
     if simple_chat_message is None and quote is None and stock_candidate is None and wants_analysis:
@@ -1373,12 +1661,14 @@ def _build_response(
                 messages=[*existing_messages, user_message, assistant_message],
             )
 
-    if wants_news and quote is not None and stock_candidate is None:
+    if wants_news and not wants_analysis and quote is not None and stock_candidate is None:
         news_digest = create_news_digest(
             quote,
             requested_query=content,
             language=language,
             store=store,
+            query_limit=CHAT_NEWS_QUERY_LIMIT,
+            external_credentials=_selected_external_credentials(store, cipher),
         )
         news_digest = _complete_news_digest_summary(
             store,
@@ -1387,6 +1677,7 @@ def _build_response(
             news_digest,
             content,
             language,
+            command.llm_credential_id,
         )
         assistant_message = _news_digest_reply(quote, news_digest, language)
         return ConversationResponse(
@@ -1419,6 +1710,8 @@ def _build_response(
             analysis_mode,
             language,
             _source_adapters_from_hints(intent.source_hints if intent else []),
+            command.llm_credential_id,
+            content,
         )
         analysis_result = _analysis_with_score(store, analysis_result)
 

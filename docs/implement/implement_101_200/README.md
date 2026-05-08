@@ -29,8 +29,42 @@ Phase Title Index
 - `phase_116 - Prediction Cache Schema Boundary` -> `implement_111_120.md`
 - `phase_117 - PnL Evaluation Artifact Separation` -> `implement_111_120.md`
 - `phase_118 - Conversation E2E Validation Matrix` -> `implement_111_120.md`
+- `phase_119 - News Official Domain Boundary` -> `implement_111_120.md`
+- `phase_120 - Analysis Cleanup And Shared Helpers` -> `implement_111_120.md`
+- `phase_121 - Scoring And PnL Contract Cleanup` -> `implement_121_130.md`
+- `phase_122 - Analysis And News UI Label Cleanup` -> `implement_121_130.md`
+- `phase_123 - Chat Help And Malformed Provider Fallback` -> `implement_121_130.md`
+- `phase_124 - Help Command Credential-Free Regression` -> `implement_121_130.md`
+- `phase_125 - Chat News Query Fanout Cap` -> `implement_121_130.md`
+- `phase_126 - LLM Runtime Execution Documentation` -> `implement_121_130.md`
+- `phase_127 - Analysis And News Output Trust Cleanup` -> `implement_121_130.md`
+- `phase_128 - Malformed Output Provider Error Boundary` -> `implement_121_130.md`
+- `phase_129 - Multi Credential Selection Boundary` -> `implement_121_130.md`
+- `phase_130 - Crawl-Backed News And Scenario Prediction` -> `implement_121_130.md`
+- `phase_131 - Free RSS News Providers` -> `implement_131_140.md`
+- `phase_132 - EventRegistry News Provider` -> `implement_131_140.md`
+- `phase_133 - Reddit Public Search Provider` -> `implement_131_140.md`
+- `phase_134 - ChatGPT-Style News And Scenario Replies` -> `implement_131_140.md`
+- `phase_135 - External News Provider Credential Selection` -> `implement_131_140.md`
+- `phase_136 - Frontend Credential And Source Badges` -> `implement_131_140.md`
+- `phase_137 - Product And Runtime Documentation Update` -> `implement_131_140.md`
+- `phase_138 - Reddit Sentiment Query Boundary` -> `implement_131_140.md`
+- `phase_139 - Reddit Partial Failure Visibility` -> `implement_131_140.md`
+- `phase_140 - EventRegistry Payload Guard` -> `implement_131_140.md`
+- `phase_141 - Claude Review Documentation Integrity` -> `implement_141_150.md`
+- `phase_142 - Market Data Test Isolation` -> `implement_141_150.md`
+- `phase_143 - News Provider Robustness Cleanup` -> `implement_141_150.md`
+- `phase_144 - News Evidence Timestamp Clamp` -> `implement_141_150.md`
+- `phase_145 - News Digest Card Privacy Cleanup` -> `implement_141_150.md`
+- `phase_146 - Settings Provider Type Cleanup` -> `implement_141_150.md`
+- `phase_147 - Crawl URL Safety Boundary` -> `implement_141_150.md`
+- `phase_148 - Settings Credential Profile Actions` -> `implement_141_150.md`
+- `phase_149 - Analysis External Credential Source Collection` -> `implement_141_150.md`
 
 Open Range
 - `implement_101_110.md` exists even though the range is not full yet.
-- `implement_111_120.md` exists even though the range is not full yet.
-- Add future summaries as `implement_111_120.md`, `implement_121_130.md`, and so on.
+- `implement_111_120.md` exists.
+- `implement_121_130.md` exists even though the range is not full yet.
+- `implement_131_140.md` exists.
+- `implement_141_150.md` exists even though the range is not full yet.
+- Add future summaries as `implement_151_160.md`, `implement_161_170.md`, and so on.

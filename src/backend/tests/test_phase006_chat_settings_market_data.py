@@ -25,7 +25,6 @@ def test_settings_update_persists_across_app_instances(tmp_path: Path) -> None:
     response = first_client.patch(
         "/settings",
         json={
-            "provider": "claude",
             "analysis_mode": "deep",
             "default_market": "US",
             "default_horizon": "swing",
@@ -34,7 +33,6 @@ def test_settings_update_persists_across_app_instances(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "provider": "claude",
         "analysis_mode": "deep",
         "default_market": "US",
         "default_horizon": "swing",
@@ -46,7 +44,6 @@ def test_settings_update_persists_across_app_instances(tmp_path: Path) -> None:
 
     assert persisted_response.status_code == 200
     assert persisted_response.json() == {
-        "provider": "claude",
         "analysis_mode": "deep",
         "default_market": "US",
         "default_horizon": "swing",

@@ -1,20 +1,22 @@
 import html
 import json
 import re
+import socket
+from ipaddress import ip_address
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
 from uuid import uuid4
-
-from pydantic import BaseModel
 
 from app.features.credentials.external_providers import (
     get_external_provider_credential,
     get_naver_search_credential,
 )
+from app.features.credentials.schemas import ExternalCredentialProvider
 from app.features.market_data import service as market_data_service
 from app.features.market_data.schemas import MarketQuote
 from app.features.news_digest.schemas import (
@@ -32,10 +34,18 @@ from app.features.processing_cache.service import (
     set_cached_json,
 )
 from app.shared.provider_status import record_provider_warning
+from app.shared.datetime_utils import parse_optional_aware_datetime
+from app.shared.pydantic_compat import model_dump as _model_dump
 from app.shared.state_store import LocalStateStore
 
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 SERPAPI_SEARCH_URL = "https://serpapi.com/search.json"
+FREE_RSS_NEWS_PROVIDERS: Tuple[NewsProvider, ...] = (
+    "seekingalpha_rss",
+    "yahoo_finance_rss",
+    "google_news_rss",
+    "bing_news_rss",
+)
 DEFAULT_NEWS_PROVIDERS: Tuple[NewsProvider, ...] = (
     "tavily_news",
     "gnews_news",
@@ -46,20 +56,36 @@ OPTIONAL_NEWS_PROVIDERS: Tuple[NewsProvider, ...] = (
     "naver_news",
     "serpapi_social_web",
 )
+REDDIT_PUBLIC_SEARCH_SUBREDDITS: Tuple[str, ...] = (
+    "stocks",
+    "investing",
+    "SecurityAnalysis",
+    "ValueInvesting",
+)
 PROVIDER_PRIORITY: Dict[NewsProvider, int] = {
-    "tavily_news": 0,
-    "naver_news": 1,
-    "gnews_news": 2,
-    "serpapi_google_news": 3,
-    "serpapi_google_web": 4,
-    "serpapi_social_web": 5,
+    "seekingalpha_rss": 0,
+    "yahoo_finance_rss": 1,
+    "google_news_rss": 2,
+    "bing_news_rss": 3,
+    "eventregistry_news": 4,
+    "tavily_news": 5,
+    "naver_news": 6,
+    "gnews_news": 7,
+    "serpapi_google_news": 8,
+    "serpapi_google_web": 9,
+    "serpapi_social_web": 10,
+    "reddit_public_search": 11,
+    "web_crawl": 12,
+    "reddit_crawl": 13,
 }
 NEWS_QUERY_SUFFIX = "latest company news earnings official business controversy"
 SOCIAL_QUERY_SUFFIX = (
-    "(site:x.com OR site:twitter.com OR site:facebook.com) public posts CEO Trump policy tariffs"
+    "(site:x.com OR site:twitter.com OR site:facebook.com) public posts CEO leadership policy investor reaction"
 )
 NEWS_PROVIDER_CACHE_TTL_SECONDS = 15 * 60
 SNIPPET_MAX_LENGTH = 260
+CRAWL_MAX_BYTES = 200_000
+URL_RE = re.compile(r"https?://[^\s<>'\")\]]+")
 QUOTE_PAGE_DOMAINS = (
     "finance.yahoo.com",
     "google.com",
@@ -154,10 +180,7 @@ class NewsProviderError(Exception):
     pass
 
 
-def _model_dump(model: BaseModel) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return cast(Dict[str, Any], model.model_dump())
-    return cast(Dict[str, Any], model.dict())
+ExternalCredentialMap = Mapping[ExternalCredentialProvider, str]
 
 
 def _now() -> str:
@@ -212,6 +235,13 @@ def _source_domain(url: Optional[str], source: Optional[str]) -> Optional[str]:
         return domain
     cleaned_source = _clean_text(source)
     return cleaned_source.lower().replace(" ", "") or None
+
+
+def _is_official_domain(domain: str) -> bool:
+    return any(
+        domain == official or domain.endswith(f".{official}")
+        for official in OFFICIAL_DOMAINS
+    )
 
 
 def _truncate_text(value: Any, max_length: int = SNIPPET_MAX_LENGTH) -> Optional[str]:
@@ -270,7 +300,7 @@ def _category_for_article(
         return "earnings"
     if _contains_any_keyword(text, ("results", "revenue", "guidance", "conference call")):
         return "earnings"
-    if domain.endswith(OFFICIAL_DOMAINS) or any(domain == item for item in OFFICIAL_DOMAINS):
+    if _is_official_domain(domain):
         return "official"
     if _contains_any_keyword(text, ("official", "newsroom", "investor relations", "sec")):
         return "official"
@@ -323,7 +353,7 @@ def _importance_score(
     score = CATEGORY_BASE_SCORES[category]
     domain = _source_from_url(url) or ""
     text = _combined_text(title, url, source, snippet)
-    if domain.endswith(OFFICIAL_DOMAINS) or any(domain == item for item in OFFICIAL_DOMAINS):
+    if _is_official_domain(domain):
         score += 12
     if _contains_any_keyword(text, ("breaking", "exclusive", "major", "핵심", "주요")):
         score += 5
@@ -387,17 +417,592 @@ def _fetch_json(
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             charset = response.headers.get_content_charset() or "utf-8"
             data = json.loads(response.read().decode(charset))
-    except (
-        TimeoutError,
-        urllib.error.HTTPError,
-        urllib.error.URLError,
-        OSError,
-        ValueError,
-    ):
+    except urllib.error.HTTPError as error:
+        if error.code == 429:
+            raise NewsProviderError("News provider request failed:429") from None
+        raise NewsProviderError("News provider request failed.") from None
+    except (TimeoutError, urllib.error.URLError, OSError, ValueError):
         raise NewsProviderError("News provider request failed.") from None
     if not isinstance(data, dict):
         raise NewsProviderError("News provider response was malformed.")
     return cast(Dict[str, Any], data)
+
+
+def _external_api_key(
+    provider: ExternalCredentialProvider,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> str:
+    if external_credentials is not None:
+        api_key = external_credentials.get(provider)
+        if api_key:
+            return api_key
+        raise MissingNewsCredentialError
+    credential = get_external_provider_credential(cast(Any, provider))
+    if credential is None:
+        raise MissingNewsCredentialError
+    return credential.api_key
+
+
+def _fetch_text(
+    url: str,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    timeout_seconds: int = 10,
+) -> str:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.5",
+            "User-Agent": "Stuck_LLM/0.1 news rss collector",
+            **(headers or {}),
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            return response.read(CRAWL_MAX_BYTES).decode(charset, errors="replace")
+    except (TimeoutError, urllib.error.HTTPError, urllib.error.URLError, OSError):
+        raise NewsProviderError("RSS provider request failed.") from None
+
+
+def _literal_ip(hostname: str) -> Optional[str]:
+    try:
+        return str(ip_address(hostname))
+    except ValueError:
+        return None
+
+
+def _unsafe_crawl_ip(value: str) -> bool:
+    try:
+        address = ip_address(value)
+    except ValueError:
+        return False
+    return (
+        str(address) == "169.254.169.254"
+        or address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_multicast
+        or address.is_reserved
+        or address.is_unspecified
+    )
+
+
+def _unsafe_crawl_host(hostname: str) -> bool:
+    normalized = hostname.lower().rstrip(".")
+    if normalized in {"localhost", "localhost.localdomain"}:
+        return True
+    if normalized.endswith((".localhost", ".local", ".internal")):
+        return True
+    literal_ip = _literal_ip(normalized)
+    return literal_ip is not None and _unsafe_crawl_ip(literal_ip)
+
+
+def _crawl_host_resolves_unsafely(hostname: str, port: Optional[int]) -> bool:
+    try:
+        normalized = hostname.rstrip(".").encode("idna").decode("ascii")
+        rows = socket.getaddrinfo(
+            normalized,
+            port or 443,
+            type=socket.SOCK_STREAM,
+        )
+    except (OSError, UnicodeError):
+        return True
+
+    addresses: List[str] = []
+    for row in rows:
+        sockaddr = row[4]
+        if isinstance(sockaddr, tuple) and sockaddr:
+            addresses.append(str(sockaddr[0]))
+    return not addresses or any(_unsafe_crawl_ip(address) for address in addresses)
+
+
+def _safe_crawl_url(value: str, *, resolve_host: bool = True) -> Optional[str]:
+    raw_url = value.strip().rstrip(".,;")
+    try:
+        parsed = urllib.parse.urlsplit(raw_url)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    if not parsed.netloc or parsed.hostname is None:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    if _unsafe_crawl_host(parsed.hostname):
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if resolve_host and _crawl_host_resolves_unsafely(parsed.hostname, port):
+        return None
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path or "/",
+            parsed.query,
+            "",
+        )
+    )
+
+
+def _extract_user_urls(text: str) -> Tuple[str, ...]:
+    urls: List[str] = []
+    seen: set[str] = set()
+    for match in URL_RE.finditer(text):
+        safe_url = _safe_crawl_url(match.group(0), resolve_host=False)
+        if safe_url is None or safe_url in seen:
+            continue
+        seen.add(safe_url)
+        urls.append(safe_url)
+    return tuple(urls)
+
+
+def _fetch_url_text(url: str, timeout_seconds: int = 10) -> str:
+    safe_url = _safe_crawl_url(url)
+    if safe_url is None:
+        raise NewsProviderError("URL is not allowed for crawling.")
+    request = urllib.request.Request(
+        safe_url,
+        headers={
+            "Accept": "text/html,application/xhtml+xml,text/plain,application/json;q=0.8,*/*;q=0.5",
+            "User-Agent": "Stuck_LLM/0.1 research crawler",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            final_url = response.geturl()
+            if final_url and _safe_crawl_url(final_url) is None:
+                raise NewsProviderError("Crawl redirect target is not allowed.")
+            content_type = response.headers.get("content-type", "")
+            content_type_lower = content_type.lower()
+            if content_type and not any(
+                kind in content_type_lower for kind in ("html", "text", "json")
+            ):
+                raise NewsProviderError("Crawl response type is not supported.")
+            data = response.read(CRAWL_MAX_BYTES + 1)
+    except (TimeoutError, urllib.error.HTTPError, urllib.error.URLError, OSError):
+        raise NewsProviderError("URL crawl failed.") from None
+    if len(data) > CRAWL_MAX_BYTES:
+        data = data[:CRAWL_MAX_BYTES]
+    return data.decode("utf-8", errors="replace")
+
+
+def _html_title(markup: str, fallback_url: str) -> str:
+    for pattern in (
+        r"<meta\s+property=[\"']og:title[\"']\s+content=[\"']([^\"']+)[\"']",
+        r"<meta\s+name=[\"']twitter:title[\"']\s+content=[\"']([^\"']+)[\"']",
+        r"<title[^>]*>(.*?)</title>",
+        r"<h1[^>]*>(.*?)</h1>",
+    ):
+        match = re.search(pattern, markup, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            title = _clean_text(match.group(1))
+            if title:
+                return title
+    return fallback_url
+
+
+def _html_published_at(markup: str) -> Optional[str]:
+    for pattern in (
+        r"<meta\s+property=[\"']article:published_time[\"']\s+content=[\"']([^\"']+)[\"']",
+        r"<meta\s+name=[\"']date[\"']\s+content=[\"']([^\"']+)[\"']",
+        r"<time[^>]+datetime=[\"']([^\"']+)[\"']",
+    ):
+        match = re.search(pattern, markup, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            return _normalize_published_at(match.group(1))
+    return None
+
+
+def _html_snippet(markup: str) -> Optional[str]:
+    article_match = re.search(
+        r"<article[^>]*>(.*?)</article>",
+        markup,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    selected = article_match.group(1) if article_match else markup
+    selected = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", selected, flags=re.IGNORECASE | re.DOTALL)
+    return _truncate_text(selected, max_length=500)
+
+
+def _crawl_web_article(url: str, query: str) -> Optional[NewsArticle]:
+    safe_url = _safe_crawl_url(url, resolve_host=False)
+    if safe_url is None:
+        raise NewsProviderError("URL is not allowed for crawling.")
+    markup = _fetch_url_text(safe_url)
+    title = _html_title(markup, safe_url)
+    return _article(
+        provider="web_crawl",
+        query=query,
+        rank=0,
+        title=title,
+        url=safe_url,
+        source=_source_from_url(safe_url),
+        published_at=_html_published_at(markup),
+        snippet=_html_snippet(markup),
+    )
+
+
+def _reddit_search_api_url(url: str) -> Optional[str]:
+    parsed = urllib.parse.urlsplit(url)
+    hostname = (parsed.hostname or "").lower().removeprefix("www.")
+    if hostname != "reddit.com" or not parsed.path.startswith("/search"):
+        return None
+    query = urllib.parse.parse_qs(parsed.query).get("q", [""])[0].strip()
+    if not query:
+        return None
+    encoded = urllib.parse.urlencode(
+        {
+            "q": query,
+            "sort": "relevance",
+            "t": "month",
+            "limit": "10",
+        }
+    )
+    return f"https://www.reddit.com/search.json?{encoded}"
+
+
+def _collect_reddit_search_url(url: str, limit: int) -> List[NewsArticle]:
+    api_url = _reddit_search_api_url(url)
+    if api_url is None:
+        raise NewsProviderError("Reddit search URL is not supported.")
+    payload = _fetch_json(
+        api_url,
+        headers={"User-Agent": "Stuck_LLM/0.1 research crawler"},
+    )
+    raw_children = payload.get("data")
+    children = raw_children.get("children", []) if isinstance(raw_children, dict) else []
+    articles: List[NewsArticle] = []
+    for index, item in enumerate(cast(List[Dict[str, Any]], children)[:limit]):
+        if not isinstance(item, dict) or not isinstance(item.get("data"), dict):
+            continue
+        data = cast(Dict[str, Any], item["data"])
+        permalink = _clean_text(data.get("permalink"))
+        article_url = (
+            f"https://www.reddit.com{permalink}"
+            if permalink.startswith("/")
+            else permalink or url
+        )
+        created_utc = data.get("created_utc")
+        published_at = None
+        if isinstance(created_utc, (int, float)):
+            published_at = datetime.fromtimestamp(created_utc, timezone.utc).isoformat()
+        article = _article(
+            provider="reddit_crawl",
+            query=url,
+            rank=index,
+            title=data.get("title"),
+            url=article_url,
+            source=data.get("subreddit_name_prefixed") or "Reddit",
+            published_at=published_at,
+            snippet=data.get("selftext") or data.get("title"),
+        )
+        if article is not None:
+            articles.append(article)
+    return articles
+
+
+def _reddit_article_from_post(
+    *,
+    provider: NewsProvider,
+    query: str,
+    rank: int,
+    data: Dict[str, Any],
+) -> Optional[NewsArticle]:
+    permalink = _clean_text(data.get("permalink"))
+    article_url = (
+        f"https://www.reddit.com{permalink}"
+        if permalink.startswith("/")
+        else permalink or _clean_text(data.get("url"))
+    )
+    created_utc = data.get("created_utc")
+    published_at = None
+    if isinstance(created_utc, (int, float)):
+        published_at = datetime.fromtimestamp(created_utc, timezone.utc).isoformat()
+    return _article(
+        provider=provider,
+        query=query,
+        rank=rank,
+        title=data.get("title"),
+        url=article_url,
+        source=data.get("subreddit_name_prefixed") or "Reddit",
+        published_at=published_at,
+        snippet=data.get("selftext") or data.get("title"),
+    )
+
+
+def _collect_reddit_public_search(query: str, limit: int) -> Tuple[List[NewsArticle], int]:
+    articles: List[NewsArticle] = []
+    seen: set[str] = set()
+    failed_requests = 0
+    per_subreddit_limit = max(1, min(limit, 10))
+    for subreddit in REDDIT_PUBLIC_SEARCH_SUBREDDITS:
+        encoded = urllib.parse.urlencode(
+            {
+                "q": query,
+                "restrict_sr": "1",
+                "sort": "relevance",
+                "t": "month",
+                "limit": str(per_subreddit_limit),
+            }
+        )
+        url = f"https://old.reddit.com/r/{subreddit}/search.json?{encoded}"
+        try:
+            payload = _fetch_json(
+                url,
+                headers={"User-Agent": "Stuck_LLM/0.1 reddit public search"},
+            )
+        except NewsProviderError as error:
+            failed_requests += 1
+            if _is_rate_limit_error(error):
+                break
+            continue
+        raw_children = payload.get("data")
+        children = raw_children.get("children", []) if isinstance(raw_children, dict) else []
+        for item in cast(List[Dict[str, Any]], children):
+            if not isinstance(item, dict) or not isinstance(item.get("data"), dict):
+                continue
+            article = _reddit_article_from_post(
+                provider="reddit_public_search",
+                query=query,
+                rank=len(articles),
+                data=cast(Dict[str, Any], item["data"]),
+            )
+            if article is None:
+                continue
+            key = _dedupe_key(article)
+            title_key = f"title:{re.sub(r'[^a-z0-9가-힣]+', ' ', article.title.lower()).strip()}"
+            if key in seen or title_key in seen:
+                continue
+            seen.add(key)
+            seen.add(title_key)
+            articles.append(article)
+            if len(articles) >= limit:
+                return articles, failed_requests
+    if not articles and failed_requests:
+        raise NewsProviderError("Reddit public search failed.")
+    return articles, failed_requests
+
+
+def _is_rate_limit_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return "429" in message or "rate limit" in message or "rate-limited" in message
+
+
+def _xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower()
+
+
+def _xml_child_text(element: ET.Element, *names: str) -> Optional[str]:
+    expected = {name.lower() for name in names}
+    for child in list(element):
+        if _xml_local_name(child.tag) in expected:
+            return child.text
+    return None
+
+
+def _rss_items(xml: str) -> List[ET.Element]:
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError:
+        raise NewsProviderError("RSS provider response was malformed.") from None
+    return [
+        element
+        for element in root.iter()
+        if _xml_local_name(element.tag) == "item"
+    ]
+
+
+def _rss_articles(
+    *,
+    provider: NewsProvider,
+    query: str,
+    xml: str,
+    source_fallback: str,
+    limit: int,
+) -> List[NewsArticle]:
+    articles: List[NewsArticle] = []
+    for index, item in enumerate(_rss_items(xml)[:limit]):
+        source = _xml_child_text(item, "source") or source_fallback
+        article = _article(
+            provider=provider,
+            query=query,
+            rank=index,
+            title=_xml_child_text(item, "title"),
+            url=_xml_child_text(item, "link", "guid"),
+            source=source,
+            published_at=_xml_child_text(item, "pubDate", "published", "updated"),
+            snippet=_xml_child_text(item, "description", "summary"),
+        )
+        if article is not None:
+            articles.append(article)
+    return articles
+
+
+def _rss_headers() -> Dict[str, str]:
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+        )
+    }
+
+
+def _collect_seekingalpha_rss(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
+    if quote.market != "US":
+        return []
+    ticker = urllib.parse.quote(quote.symbol.upper())
+    url = f"https://seekingalpha.com/api/sa/combined/{ticker}.xml"
+    return _rss_articles(
+        provider="seekingalpha_rss",
+        query=query,
+        xml=_fetch_text(url, headers=_rss_headers()),
+        source_fallback="Seeking Alpha",
+        limit=limit,
+    )
+
+
+def _yahoo_finance_rss_symbol(quote: MarketQuote) -> str:
+    if quote.market == "KR" and not quote.symbol.endswith((".KS", ".KQ")):
+        return f"{quote.symbol}.KS"
+    return quote.symbol
+
+
+def _collect_yahoo_finance_rss(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
+    region = "KR" if quote.market == "KR" else "US"
+    locale = "ko-KR" if quote.market == "KR" else "en-US"
+    encoded = urllib.parse.urlencode(
+        {
+            "s": _yahoo_finance_rss_symbol(quote),
+            "region": region,
+            "lang": locale,
+        }
+    )
+    url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?{encoded}"
+    return _rss_articles(
+        provider="yahoo_finance_rss",
+        query=query,
+        xml=_fetch_text(url, headers=_rss_headers()),
+        source_fallback="Yahoo Finance",
+        limit=limit,
+    )
+
+
+def _collect_google_news_rss(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
+    params = {
+        "q": f"{query} stock",
+        "hl": "ko" if quote.market == "KR" else "en-US",
+        "gl": "KR" if quote.market == "KR" else "US",
+        "ceid": "KR:ko" if quote.market == "KR" else "US:en",
+    }
+    url = f"https://news.google.com/rss/search?{urllib.parse.urlencode(params)}"
+    return _rss_articles(
+        provider="google_news_rss",
+        query=query,
+        xml=_fetch_text(url, headers=_rss_headers()),
+        source_fallback="Google News",
+        limit=limit,
+    )
+
+
+def _collect_bing_news_rss(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
+    encoded = urllib.parse.urlencode(
+        {
+            "q": f"{query} stock",
+            "format": "rss",
+            "mkt": "ko-KR" if quote.market == "KR" else "en-US",
+        }
+    )
+    url = f"https://www.bing.com/news/search?{encoded}"
+    return _rss_articles(
+        provider="bing_news_rss",
+        query=query,
+        xml=_fetch_text(url, headers=_rss_headers()),
+        source_fallback="Bing News",
+        limit=limit,
+    )
+
+
+def _eventregistry_source_name(item: Dict[str, Any]) -> Optional[str]:
+    source = item.get("source")
+    if isinstance(source, dict):
+        return _clean_text(source.get("title") or source.get("name") or source.get("uri")) or None
+    return _clean_text(source) or None
+
+
+def _eventregistry_date_window(quote: MarketQuote) -> Tuple[str, str]:
+    parsed = parse_optional_aware_datetime(quote.as_of_at)
+    end_date = (parsed or datetime.now(timezone.utc)).date()
+    start_date = end_date - timedelta(days=30)
+    return start_date.isoformat(), end_date.isoformat()
+
+
+def _collect_eventregistry_news(
+    query: str,
+    limit: int,
+    quote: MarketQuote,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[NewsArticle]:
+    api_key = _external_api_key("eventregistry", external_credentials)
+    date_start, date_end = _eventregistry_date_window(quote)
+    payload: Dict[str, Any] = {
+        "apiKey": api_key,
+        "action": "getArticles",
+        "keyword": query,
+        "keywordLoc": "body,title",
+        "keywordSearchMode": "phrase",
+        "dateStart": date_start,
+        "dateEnd": date_end,
+        "isDuplicateFilter": "skipDuplicates",
+        "dataType": "news",
+        "forceMaxDataTimeWindow": 31,
+        "articlesPage": 1,
+        "articlesCount": min(max(limit, 1), 100),
+        "articlesSortBy": "date",
+        "articlesSortByAsc": False,
+        "includeArticleBasicInfo": True,
+        "includeArticleTitle": True,
+        "includeArticleBody": True,
+        "includeArticleUrl": True,
+        "includeArticleAuthors": False,
+        "includeArticleSentiment": True,
+        "articleBodyLen": 800,
+        "resultType": "articles",
+    }
+    if quote.market == "US":
+        payload["lang"] = "eng"
+    response = _fetch_json(
+        "https://www.eventregistry.org/api/v1/article",
+        headers={"Accept": "application/json"},
+        payload=payload,
+        timeout_seconds=15,
+    )
+    raw_articles = response.get("articles")
+    if not isinstance(raw_articles, dict):
+        raise NewsProviderError("EventRegistry response was malformed.")
+    raw_results = raw_articles.get("results", [])
+    if not isinstance(raw_results, list):
+        raise NewsProviderError("EventRegistry response was malformed.")
+    articles: List[NewsArticle] = []
+    for index, item in enumerate(cast(List[Dict[str, Any]], raw_results)[:limit]):
+        if not isinstance(item, dict):
+            continue
+        article = _article(
+            provider="eventregistry_news",
+            query=query,
+            rank=index,
+            title=item.get("title"),
+            url=item.get("url"),
+            source=_eventregistry_source_name(item),
+            published_at=item.get("dateTimePub") or item.get("date") or item.get("publishedAt"),
+            snippet=item.get("body") or item.get("summary"),
+        )
+        if article is not None:
+            articles.append(article)
+    return articles
 
 
 def _article(
@@ -445,7 +1050,7 @@ def _article(
         rank=rank,
         category=category,
         headline_ko=clean_title,
-        summary_ko=clean_snippet,
+        summary_ko=None,
         importance_score=importance_score,
         source_domain=source_domain,
     )
@@ -532,20 +1137,72 @@ def _social_source_requested(requested_query: str) -> bool:
     )
 
 
+def _reddit_public_search_requested(requested_query: str) -> bool:
+    text = _combined_text(requested_query)
+    return _contains_any_keyword(
+        text,
+        (
+            "reddit",
+            "레딧",
+            "community",
+            "communities",
+            "forum",
+            "forums",
+            "커뮤니티",
+            "게시판",
+            "investor sentiment",
+            "retail sentiment",
+            "sentiment",
+            "social reaction",
+            "market reaction",
+            "investor reaction",
+            "retail reaction",
+            "투자자 심리",
+            "투자 심리",
+            "투자심리",
+            "시장 반응",
+            "투자자 반응",
+            "여론",
+        ),
+    )
+
+
+def _has_external_api_key(
+    provider: ExternalCredentialProvider,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> bool:
+    if external_credentials is not None:
+        return bool(external_credentials.get(provider))
+    return get_external_provider_credential(cast(Any, provider)) is not None
+
+
 def _expand_default_providers(
     providers: Tuple[NewsProvider, ...],
     requested_query: str,
+    external_credentials: Optional[ExternalCredentialMap],
 ) -> Tuple[NewsProvider, ...]:
     if providers != DEFAULT_NEWS_PROVIDERS:
         return providers
-    expanded: List[NewsProvider] = list(providers)
+    expanded: List[NewsProvider] = []
+    if _has_external_api_key("tavily", external_credentials):
+        expanded.append("tavily_news")
+    if _has_external_api_key("gnews", external_credentials):
+        expanded.append("gnews_news")
+    if _has_external_api_key("serpapi", external_credentials):
+        expanded.extend(("serpapi_google_news", "serpapi_google_web"))
+    if _has_external_api_key("eventregistry", external_credentials):
+        expanded.append("eventregistry_news")
+    if not expanded and get_naver_search_credential() is None:
+        expanded.extend(FREE_RSS_NEWS_PROVIDERS)
     if get_naver_search_credential() is not None:
         expanded.append("naver_news")
     if (
-        get_external_provider_credential("serpapi") is not None
+        _has_external_api_key("serpapi", external_credentials)
         and _social_source_requested(requested_query)
     ):
         expanded.append("serpapi_social_web")
+    if _reddit_public_search_requested(requested_query):
+        expanded.append("reddit_public_search")
     return _dedupe_providers(expanded)
 
 
@@ -567,6 +1224,15 @@ def _provider_queries(
     quote: MarketQuote,
     requested_query: str,
 ) -> Tuple[str, ...]:
+    if provider == "reddit_public_search":
+        requested = _clean_text(requested_query)
+        company = f"{quote.name} {quote.symbol}"
+        return _dedupe_queries((f"{company} {requested}" if requested else queries[0],))
+    if (
+        provider in FREE_RSS_NEWS_PROVIDERS
+        or provider == "eventregistry_news"
+    ):
+        return (queries[0],)
     if provider != "serpapi_social_web":
         return queries
     requested = _clean_text(requested_query)
@@ -579,14 +1245,16 @@ def _provider_queries(
     )
 
 
-def _collect_tavily_news(query: str, limit: int) -> List[NewsArticle]:
-    credential = get_external_provider_credential("tavily")
-    if credential is None:
-        raise MissingNewsCredentialError
+def _collect_tavily_news(
+    query: str,
+    limit: int,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[NewsArticle]:
+    api_key = _external_api_key("tavily", external_credentials)
     payload = _fetch_json(
         "https://api.tavily.com/search",
         payload={
-            "api_key": credential.api_key,
+            "api_key": api_key,
             "query": query,
             "search_depth": "basic",
             "max_results": limit,
@@ -650,16 +1318,18 @@ def _collect_naver_news(query: str, limit: int) -> List[NewsArticle]:
     return articles
 
 
-def _collect_gnews_news(query: str, limit: int) -> List[NewsArticle]:
-    credential = get_external_provider_credential("gnews")
-    if credential is None:
-        raise MissingNewsCredentialError
+def _collect_gnews_news(
+    query: str,
+    limit: int,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[NewsArticle]:
+    api_key = _external_api_key("gnews", external_credentials)
     encoded_query = urllib.parse.urlencode(
         {
             "q": query,
             "lang": "en",
             "max": str(limit),
-            "apikey": credential.api_key,
+            "apikey": api_key,
         }
     )
     payload = _fetch_json(f"https://gnews.io/api/v4/search?{encoded_query}")
@@ -712,17 +1382,20 @@ def _serpapi_news_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return rows
 
 
-def _collect_serpapi_google_news(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
-    credential = get_external_provider_credential("serpapi")
-    if credential is None:
-        raise MissingNewsCredentialError
+def _collect_serpapi_google_news(
+    query: str,
+    limit: int,
+    quote: MarketQuote,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[NewsArticle]:
+    api_key = _external_api_key("serpapi", external_credentials)
     encoded_query = urllib.parse.urlencode(
         {
             "engine": "google_news",
             "q": query,
             "gl": "kr" if quote.market == "KR" else "us",
             "hl": "ko" if quote.market == "KR" else "en",
-            "api_key": credential.api_key,
+            "api_key": api_key,
         }
     )
     payload = _fetch_json(f"{SERPAPI_SEARCH_URL}?{encoded_query}")
@@ -743,10 +1416,13 @@ def _collect_serpapi_google_news(query: str, limit: int, quote: MarketQuote) -> 
     return articles
 
 
-def _collect_serpapi_google_web(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
-    credential = get_external_provider_credential("serpapi")
-    if credential is None:
-        raise MissingNewsCredentialError
+def _collect_serpapi_google_web(
+    query: str,
+    limit: int,
+    quote: MarketQuote,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[NewsArticle]:
+    api_key = _external_api_key("serpapi", external_credentials)
     encoded_query = urllib.parse.urlencode(
         {
             "engine": "google",
@@ -755,7 +1431,7 @@ def _collect_serpapi_google_web(query: str, limit: int, quote: MarketQuote) -> L
             "google_domain": "google.com",
             "hl": "ko" if quote.market == "KR" else "en",
             "gl": "kr" if quote.market == "KR" else "us",
-            "api_key": credential.api_key,
+            "api_key": api_key,
         }
     )
     payload = _fetch_json(f"{SERPAPI_SEARCH_URL}?{encoded_query}")
@@ -780,8 +1456,13 @@ def _collect_serpapi_google_web(query: str, limit: int, quote: MarketQuote) -> L
     return articles
 
 
-def _collect_serpapi_social_web(query: str, limit: int, quote: MarketQuote) -> List[NewsArticle]:
-    articles = _collect_serpapi_google_web(query, limit, quote)
+def _collect_serpapi_social_web(
+    query: str,
+    limit: int,
+    quote: MarketQuote,
+    external_credentials: Optional[ExternalCredentialMap],
+) -> List[NewsArticle]:
+    articles = _collect_serpapi_google_web(query, limit, quote, external_credentials)
     return [
         article.model_copy(update={"provider": "serpapi_social_web"})
         for article in articles
@@ -794,18 +1475,35 @@ def _collect_provider(
     query: str,
     limit: int,
     quote: MarketQuote,
-) -> List[NewsArticle]:
+    external_credentials: Optional[ExternalCredentialMap],
+) -> Tuple[List[NewsArticle], Optional[NewsProviderRunStatus]]:
+    if provider == "eventregistry_news":
+        return _collect_eventregistry_news(query, limit, quote, external_credentials), None
+    if provider == "reddit_public_search":
+        articles, failed_requests = _collect_reddit_public_search(query, limit)
+        warning_status: Optional[NewsProviderRunStatus] = (
+            "partial_provider_error" if failed_requests else None
+        )
+        return articles, warning_status
+    if provider == "seekingalpha_rss":
+        return _collect_seekingalpha_rss(query, limit, quote), None
+    if provider == "yahoo_finance_rss":
+        return _collect_yahoo_finance_rss(query, limit, quote), None
+    if provider == "google_news_rss":
+        return _collect_google_news_rss(query, limit, quote), None
+    if provider == "bing_news_rss":
+        return _collect_bing_news_rss(query, limit, quote), None
     if provider == "tavily_news":
-        return _collect_tavily_news(query, limit)
+        return _collect_tavily_news(query, limit, external_credentials), None
     if provider == "naver_news":
-        return _collect_naver_news(query, limit)
+        return _collect_naver_news(query, limit), None
     if provider == "gnews_news":
-        return _collect_gnews_news(query, limit)
+        return _collect_gnews_news(query, limit, external_credentials), None
     if provider == "serpapi_google_news":
-        return _collect_serpapi_google_news(query, limit, quote)
+        return _collect_serpapi_google_news(query, limit, quote, external_credentials), None
     if provider == "serpapi_social_web":
-        return _collect_serpapi_social_web(query, limit, quote)
-    return _collect_serpapi_google_web(query, limit, quote)
+        return _collect_serpapi_social_web(query, limit, quote, external_credentials), None
+    return _collect_serpapi_google_web(query, limit, quote, external_credentials), None
 
 
 def _provider_cache_components(
@@ -820,7 +1518,7 @@ def _provider_cache_components(
         "limit": limit,
         "market": quote.market,
         "symbol": quote.symbol,
-        "provider_version": "phase_093_news_provider_v1",
+        "provider_version": "phase_143_news_provider_v2",
     }
 
 
@@ -831,7 +1529,8 @@ def _collect_provider_with_cache(
     quote: MarketQuote,
     store: Optional[LocalStateStore],
     cache_ttl_seconds: int,
-) -> Tuple[List[NewsArticle], bool]:
+    external_credentials: Optional[ExternalCredentialMap],
+) -> Tuple[List[NewsArticle], bool, Optional[NewsProviderRunStatus]]:
     components = _provider_cache_components(provider, query, limit, quote)
     if store is not None:
         cached_payload = get_cached_json(store, "news_provider_result", components)
@@ -845,9 +1544,16 @@ def _collect_provider_with_cache(
                         if isinstance(article, dict)
                     ],
                     True,
+                    None,
                 )
 
-    articles = _collect_provider(provider, query, limit, quote)
+    articles, warning_status = _collect_provider(
+        provider,
+        query,
+        limit,
+        quote,
+        external_credentials,
+    )
     if store is not None:
         set_cached_json(
             store,
@@ -856,7 +1562,7 @@ def _collect_provider_with_cache(
             {"articles": [_model_dump(article) for article in articles]},
             ttl_seconds=cache_ttl_seconds,
         )
-    return articles, False
+    return articles, False, warning_status
 
 
 def _dedupe_key(article: NewsArticle) -> str:
@@ -867,15 +1573,7 @@ def _dedupe_key(article: NewsArticle) -> str:
 
 
 def _parse_sort_datetime(value: Optional[str]) -> Optional[datetime]:
-    if value is None:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed
+    return parse_optional_aware_datetime(value)
 
 
 def _sort_timestamp(value: Optional[str]) -> float:
@@ -997,6 +1695,44 @@ def _key_points(articles: List[NewsArticle], language: str) -> List[str]:
     return points
 
 
+def _collect_user_url_articles(
+    requested_query: str,
+    *,
+    provider_limit: int,
+) -> Tuple[List[NewsArticle], List[NewsSearchRun], List[str]]:
+    articles: List[NewsArticle] = []
+    runs: List[NewsSearchRun] = []
+    warnings: List[str] = []
+
+    for url in _extract_user_urls(requested_query):
+        reddit_api_url = _reddit_search_api_url(url)
+        provider: NewsProvider = "reddit_crawl" if reddit_api_url is not None else "web_crawl"
+        try:
+            provider_articles = (
+                _collect_reddit_search_url(url, provider_limit)
+                if provider == "reddit_crawl"
+                else [article for article in [_crawl_web_article(url, url)] if article is not None]
+            )
+            run_status: NewsProviderRunStatus = "completed"
+            warning = None
+        except NewsProviderError:
+            provider_articles = []
+            run_status = "provider_error"
+            warning = record_provider_warning(warnings, run_status, provider)
+        articles.extend(provider_articles)
+        runs.append(
+            NewsSearchRun(
+                provider=provider,
+                query=url,
+                result_count=len(provider_articles),
+                status=run_status,
+                warning=warning,
+            )
+        )
+
+    return articles, runs, warnings
+
+
 def create_news_digest(
     quote: MarketQuote,
     *,
@@ -1006,17 +1742,32 @@ def create_news_digest(
     provider_limit: int = 10,
     important_limit: int = 5,
     additional_limit: int = 10,
+    query_limit: Optional[int] = None,
     store: Optional[LocalStateStore] = None,
     cache_ttl_seconds: int = NEWS_PROVIDER_CACHE_TTL_SECONDS,
+    external_credentials: Optional[ExternalCredentialMap] = None,
 ) -> NewsDigest:
     queries = _build_news_queries(quote, requested_query)
+    if query_limit is not None and query_limit > 0:
+        queries = queries[:query_limit]
     query = queries[0]
-    active_providers = _expand_default_providers(providers, requested_query)
+    active_providers = _expand_default_providers(
+        providers,
+        requested_query,
+        external_credentials,
+    )
     articles: List[NewsArticle] = []
     provider_runs: List[NewsSearchRun] = []
     warnings: List[str] = []
     cache_hits = 0
     cache_misses = 0
+    url_articles, url_runs, url_warnings = _collect_user_url_articles(
+        requested_query,
+        provider_limit=provider_limit,
+    )
+    articles.extend(url_articles)
+    provider_runs.extend(url_runs)
+    warnings.extend(url_warnings)
 
     for provider in active_providers:
         for provider_query in _provider_queries(
@@ -1026,20 +1777,25 @@ def create_news_digest(
             requested_query=requested_query,
         ):
             try:
-                provider_articles, cache_hit = _collect_provider_with_cache(
+                provider_articles, cache_hit, warning_status = _collect_provider_with_cache(
                     provider,
                     provider_query,
                     provider_limit,
                     quote,
                     store,
                     cache_ttl_seconds,
+                    external_credentials,
                 )
                 if cache_hit:
                     cache_hits += 1
                 else:
                     cache_misses += 1
-                run_status: NewsProviderRunStatus = "completed"
-                warning = None
+                run_status: NewsProviderRunStatus = warning_status or "completed"
+                warning = (
+                    record_provider_warning(warnings, warning_status, provider)
+                    if warning_status is not None
+                    else None
+                )
             except MissingNewsCredentialError:
                 provider_articles = []
                 run_status = "missing_credential"

@@ -7,7 +7,10 @@ Purpose
 
 Read First
 - `llm-agent-spec.md`: conversational LLM agent behavior, stock-analysis runtime, evidence rules, response rules, UI expectations, and maintenance policy.
-- `llm-agent-phase-roadmap.md`: phase-by-phase implementation roadmap for news discovery, prediction, evidence normalization, UI, cache, PnL, and E2E validation.
+- `llm-runtime-execution.md`: execution order and data boundaries for news, prediction, charts, graph data, caches, and artifacts.
+
+Retired Docs
+- `llm-agent-phase-roadmap.md` is no longer used. Use compact phase summaries under `docs/plan`, `docs/task`, and `docs/implement` for phase history.
 
 Maintenance
 - Ask the user before changing these product specs when a new feature or behavior change affects documented agent behavior, UI rules, evidence rules, response shape, provider behavior, cache semantics, or runtime flow.

@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional, cast
+from typing import Any, Dict, Literal, Optional
 from uuid import uuid4
-
-from pydantic import BaseModel
 
 from app.features.backtest.schemas import BacktestResponse
 from app.features.conversations.schemas import (
@@ -14,14 +12,9 @@ from app.features.conversations.schemas import (
 from app.features.market_data.schemas import MarketQuote
 from app.features.news_digest.schemas import NewsDigest
 from app.features.settings.schemas import AnalysisMode, HorizonType
+from app.shared.pydantic_compat import model_dump as model_dump
 
 UserLanguage = Literal["en", "ko"]
-
-
-def model_dump(model: BaseModel) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return cast(Dict[str, Any], model.model_dump())
-    return cast(Dict[str, Any], model.dict())
 
 
 def now_iso() -> str:

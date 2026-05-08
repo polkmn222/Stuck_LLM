@@ -8,10 +8,10 @@ def test_local_state_store_persists_state_and_merges_defaults(tmp_path: Path) ->
     state_path = tmp_path / "state.json"
     store = LocalStateStore(state_path)
 
-    assert store.read()["settings"]["provider"] == "openai"
+    assert store.read()["settings"]["analysis_mode"] == "quick"
 
     def mutate(state: dict) -> str:
-        state["settings"]["provider"] = "gemini"
+        state["settings"]["analysis_mode"] = "deep"
         state["conversations"]["conv_test"] = {"messages": []}
         return "saved"
 
@@ -20,8 +20,7 @@ def test_local_state_store_persists_state_and_merges_defaults(tmp_path: Path) ->
     restored_store = LocalStateStore(state_path)
     restored_state = restored_store.read()
 
-    assert restored_state["settings"]["provider"] == "gemini"
-    assert restored_state["settings"]["analysis_mode"] == "quick"
+    assert restored_state["settings"]["analysis_mode"] == "deep"
     assert restored_state["conversations"]["conv_test"] == {"messages": []}
 
 

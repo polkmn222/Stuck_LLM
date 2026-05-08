@@ -5,15 +5,28 @@ from pydantic import BaseModel, Field
 from app.features.settings.schemas import DefaultMarket
 
 NewsProvider = Literal[
+    "seekingalpha_rss",
+    "yahoo_finance_rss",
+    "google_news_rss",
+    "bing_news_rss",
+    "eventregistry_news",
     "tavily_news",
     "naver_news",
     "gnews_news",
     "serpapi_google_news",
     "serpapi_google_web",
     "serpapi_social_web",
+    "reddit_public_search",
+    "web_crawl",
+    "reddit_crawl",
 ]
 NewsSearchStatus = Literal["completed", "partial", "empty"]
-NewsProviderRunStatus = Literal["completed", "missing_credential", "provider_error"]
+NewsProviderRunStatus = Literal[
+    "completed",
+    "missing_credential",
+    "provider_error",
+    "partial_provider_error",
+]
 NewsCategory = Literal[
     "official",
     "earnings",

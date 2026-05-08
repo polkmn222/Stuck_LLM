@@ -169,7 +169,6 @@ def test_chat_ready_request_uses_decrypted_credential_with_mocked_live_provider(
         ("auth_error", "provider authentication failed"),
         ("rate_limited", "provider is rate limiting"),
         ("timeout", "provider timed out"),
-        ("malformed_output", "provider returned an invalid analysis format"),
     ],
 )
 def test_chat_ready_request_maps_provider_errors_without_internal_details(
@@ -202,6 +201,43 @@ def test_chat_ready_request_maps_provider_errors_without_internal_details(
     assert body["status"] == "provider_error"
     assert body["messages"][-1]["meta"] == "provider error"
     assert expected_text in body["messages"][-1]["content"]
+    assert "provider detail must stay server-side" not in body["messages"][-1]["content"]
+
+
+def test_chat_ready_request_maps_malformed_output_to_provider_error_without_fallback(
+    tmp_path: Path,
+) -> None:
+    raw_key = "sk-phase128-malformed-provider-error"
+    client = TestClient(
+        create_app(
+            state_path=tmp_path / "malformed_provider_error.json",
+            llm_analysis_provider=FailingProvider("malformed_output"),
+        )
+    )
+    _save_openai_credential(client, raw_key)
+
+    response = client.post(
+        "/conversations",
+        json={
+            "content": "Should I buy Samsung Electronics?",
+            "market": "KR",
+            "horizon_type": "swing",
+            "analysis_mode": "quick",
+        },
+    )
+
+    assert response.status_code == 201
+    assert raw_key not in response.text
+    body = response.json()
+    assert body["status"] == "provider_error"
+    assert body["messages"][-1]["meta"] == "provider error"
+    assistant_content = body["messages"][-1]["content"]
+    assert "local evidence fallback" not in assistant_content
+    assert "probabilities" not in assistant_content
+    assert body["analysis_result"]["status"] == "provider_error"
+    assert body["analysis_result"]["provider_error_code"] == "malformed_output"
+    assert body["analysis_result"]["evidence_items"] == []
+    assert body["analysis_result"]["score_result"] is None
     assert "provider detail must stay server-side" not in body["messages"][-1]["content"]
 
 

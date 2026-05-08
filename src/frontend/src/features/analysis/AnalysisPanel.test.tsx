@@ -267,11 +267,96 @@ describe("AnalysisPanel", () => {
     expect(screen.getByText("35.3%")).toBeInTheDocument();
     expect(screen.getByText("11.8%")).toBeInTheDocument();
     expect(screen.getByText("Confidence: 0.74")).toBeInTheDocument();
-    expect(screen.getByText("Confidence factors: eligible_weight, stance_diversity")).toBeInTheDocument();
+    expect(screen.getByText("Confidence factors: Eligible evidence weight, Stance diversity")).toBeInTheDocument();
     expect(screen.getByText(/Expected return: -0.1% to \+3.4%/)).toBeInTheDocument();
     expect(screen.getByText(/Downside risk: 11.8%/)).toBeInTheDocument();
     expect(screen.getByText(/Similar events: 8 samples/)).toBeInTheDocument();
     expect(screen.getByText(/62.5% win rate/)).toBeInTheDocument();
     expect(screen.queryByText("Probabilities pending")).not.toBeInTheDocument();
+  });
+
+  it("localizes provider state accessibility labels", () => {
+    render(
+      <AnalysisPanel
+        copy={uiCopy.ko.analysis}
+        snapshot={{
+          conversationId: "conv_provider_state",
+          status: "analysis_completed",
+          missingInputs: [],
+          analysisRequest: {
+            market: "US",
+            symbol: "AAPL",
+            stockName: "Apple",
+            horizonType: "swing",
+            analysisMode: "quick",
+          },
+          analysisResult: {
+            analysisRequestId: "analysis_provider",
+            status: "completed",
+            includedDocumentCount: 0,
+            excludedDocumentCount: 0,
+            sourceAudit: {
+              sourceWarnings: [],
+              includedBySourceType: {},
+              excludedByReason: {},
+              promptDocumentIds: [],
+            },
+            sourceDocuments: [],
+            evidenceItems: [],
+            summary: "Provider state summary.",
+            provider: "openai",
+            model: "gpt-4.1-mini",
+            providerErrorCode: null,
+          },
+          marketSnapshot: null,
+          messages: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("분석 제공자 상태")).toBeInTheDocument();
+  });
+
+  it("localizes provider error codes", () => {
+    render(
+      <AnalysisPanel
+        copy={uiCopy.ko.analysis}
+        snapshot={{
+          conversationId: "conv_provider_error_label",
+          status: "analysis_completed",
+          missingInputs: [],
+          analysisRequest: {
+            market: "US",
+            symbol: "AAPL",
+            stockName: "Apple",
+            horizonType: "swing",
+            analysisMode: "quick",
+          },
+          analysisResult: {
+            analysisRequestId: "analysis_provider_error",
+            status: "completed",
+            includedDocumentCount: 0,
+            excludedDocumentCount: 0,
+            sourceAudit: {
+              sourceWarnings: [],
+              includedBySourceType: {},
+              excludedByReason: {},
+              promptDocumentIds: [],
+            },
+            sourceDocuments: [],
+            evidenceItems: [],
+            summary: "Provider state summary.",
+            provider: "openai",
+            model: "gpt-4.1-mini",
+            providerErrorCode: "malformed_output",
+          },
+          marketSnapshot: null,
+          messages: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("응답 형식 오류")).toBeInTheDocument();
+    expect(screen.queryByText("malformed_output")).not.toBeInTheDocument();
   });
 });

@@ -29,7 +29,7 @@
 - Use phase IDs as `phase_001`, `phase_002`, and so on.
 - Keep detailed logs at `docs/plan/plan.md`, `docs/task/task.md`, and `docs/implement/implement.md`.
 - Keep compact summaries in 100-phase folders and 10-phase files such as `task_101_110.md`.
-- Update the matching range README phase-title index when adding a summary file.
+- Same-phase requirement: a new summary file is incomplete until the matching range README phase-title index is updated.
 - Back up every non-backup file modified in a phase under `backups/<phase_id>/`.
 - Do not back up files already under `backups/`.
 - Write new Markdown content in English only.

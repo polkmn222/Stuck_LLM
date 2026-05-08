@@ -234,6 +234,10 @@ def test_live_analysis_rejects_excluded_or_prompt_budget_source_output(
 
     assert response.status == "provider_error"
     assert response.provider_error_code == "malformed_output"
+    assert response.evidence_items == []
+    assert response.included_document_count == 1
+    assert response.source_documents[0].included_in_analysis is True
+    assert response.source_documents[1].exclusion_reason == "published_after_as_of_at"
 
 
 def test_live_analysis_with_no_eligible_evidence_does_not_call_provider(

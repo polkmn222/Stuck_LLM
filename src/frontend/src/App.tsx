@@ -8,15 +8,21 @@ import { SettingsPanel } from "./features/settings/SettingsPanel";
 import {
   clearConversations,
   deleteConversation,
+  deleteExternalCredentialProfile,
   deleteLlmCredential,
   fetchConversation,
   fetchConversations,
+  fetchExternalCredentialProfiles,
+  fetchLlmCredentialProfiles,
   fetchLlmCredentialStatus,
   fetchMarketQuote,
   fetchSettings,
   runBacktest,
+  saveExternalCredential,
   saveLlmCredential,
   saveSettings,
+  selectExternalCredentialProfile,
+  selectLlmCredentialProfile,
   sendConversationMessage,
   testLlmCredential,
 } from "./shared/api";
@@ -25,13 +31,16 @@ import type {
   AppSettings,
   ConversationSummary,
   ConversationSnapshot,
+  ExternalCredentialProfileList,
+  ExternalCredentialStatus,
+  LlmCredentialProfileList,
   LlmCredentialStatus,
   SaveLlmCredentialRequest,
+  SaveExternalCredentialRequest,
   UiPreferences,
 } from "./shared/types";
 
 const DEFAULT_SETTINGS: AppSettings = {
-  provider: "openai",
   analysisMode: "quick",
   defaultMarket: "KR",
   defaultHorizon: null,
@@ -49,13 +58,26 @@ const DEFAULT_UI_PREFERENCES: UiPreferences = {
 
 const DEFAULT_CREDENTIAL_STATUS: LlmCredentialStatus = {
   configured: false,
+  credentialId: null,
+  label: null,
   provider: null,
   model: null,
   baseUrl: null,
   apiKeyMask: null,
   keySource: null,
+  isActive: false,
   createdAt: null,
   updatedAt: null,
+};
+
+const DEFAULT_CREDENTIAL_PROFILES: LlmCredentialProfileList = {
+  activeCredentialId: null,
+  credentials: [],
+};
+
+const DEFAULT_EXTERNAL_CREDENTIAL_PROFILES: ExternalCredentialProfileList = {
+  activeCredentialIds: {},
+  credentials: [],
 };
 
 type ActiveView = "chat" | "analysis" | "snapshot" | "backtest";
@@ -106,6 +128,11 @@ export function App() {
   const [credentialStatus, setCredentialStatus] = useState<LlmCredentialStatus>(
     DEFAULT_CREDENTIAL_STATUS,
   );
+  const [credentialProfiles, setCredentialProfiles] = useState<LlmCredentialProfileList>(
+    DEFAULT_CREDENTIAL_PROFILES,
+  );
+  const [externalCredentialProfiles, setExternalCredentialProfiles] =
+    useState<ExternalCredentialProfileList>(DEFAULT_EXTERNAL_CREDENTIAL_PROFILES);
   const [uiPreferences, setUiPreferences] = useState<UiPreferences>(loadUiPreferences);
   const copy = uiCopy[uiPreferences.language];
 
@@ -116,11 +143,25 @@ export function App() {
       const credentialStatusPromise = fetchLlmCredentialStatus().catch(
         () => DEFAULT_CREDENTIAL_STATUS,
       );
+      const credentialProfilesPromise = fetchLlmCredentialProfiles().catch(
+        () => DEFAULT_CREDENTIAL_PROFILES,
+      );
+      const externalCredentialProfilesPromise = fetchExternalCredentialProfiles().catch(
+        () => DEFAULT_EXTERNAL_CREDENTIAL_PROFILES,
+      );
       const conversationsPromise = fetchConversations().catch(() => []);
       try {
         const loadedSettings = await fetchSettings();
-        const [loadedCredentialStatus, loadedConversations, quote] = await Promise.all([
+        const [
+          loadedCredentialStatus,
+          loadedCredentialProfiles,
+          loadedExternalCredentialProfiles,
+          loadedConversations,
+          quote,
+        ] = await Promise.all([
           credentialStatusPromise,
+          credentialProfilesPromise,
+          externalCredentialProfilesPromise,
           conversationsPromise,
           fetchMarketQuote(
             loadedSettings.defaultMarket,
@@ -130,16 +171,27 @@ export function App() {
         if (isCurrent) {
           setSettings(loadedSettings);
           setCredentialStatus(loadedCredentialStatus);
+          setCredentialProfiles(loadedCredentialProfiles);
+          setExternalCredentialProfiles(loadedExternalCredentialProfiles);
           setConversationSummaries(loadedConversations);
           setSnapshot(seededSnapshot(quote));
         }
       } catch {
         if (isCurrent) {
-          const [loadedCredentialStatus, loadedConversations] = await Promise.all([
+          const [
+            loadedCredentialStatus,
+            loadedCredentialProfiles,
+            loadedExternalCredentialProfiles,
+            loadedConversations,
+          ] = await Promise.all([
             credentialStatusPromise,
+            credentialProfilesPromise,
+            externalCredentialProfilesPromise,
             conversationsPromise,
           ]);
           setCredentialStatus(loadedCredentialStatus);
+          setCredentialProfiles(loadedCredentialProfiles);
+          setExternalCredentialProfiles(loadedExternalCredentialProfiles);
           setConversationSummaries(loadedConversations);
           setSettings(DEFAULT_SETTINGS);
         }
@@ -172,12 +224,77 @@ export function App() {
   async function handleSaveCredential(request: SaveLlmCredentialRequest) {
     const nextStatus = await saveLlmCredential(request);
     setCredentialStatus(nextStatus);
+    const nextProfiles = await fetchLlmCredentialProfiles().catch(() => ({
+      activeCredentialId: nextStatus.credentialId,
+      credentials: nextStatus.configured ? [nextStatus] : [],
+    }));
+    setCredentialProfiles(nextProfiles);
     return nextStatus;
   }
 
   async function handleDeleteCredential() {
     const nextStatus = await deleteLlmCredential();
     setCredentialStatus(nextStatus);
+    const nextProfiles = await fetchLlmCredentialProfiles().catch(() => ({
+      activeCredentialId: nextStatus.credentialId,
+      credentials: nextStatus.configured ? [nextStatus] : [],
+    }));
+    setCredentialProfiles(nextProfiles);
+    return nextStatus;
+  }
+
+  async function handleSelectCredential(credentialId: string) {
+    const nextStatus = await selectLlmCredentialProfile(credentialId);
+    setCredentialStatus(nextStatus);
+    setCredentialProfiles((current) => ({
+      activeCredentialId: nextStatus.credentialId,
+      credentials: current.credentials.map((profile) => ({
+        ...profile,
+        isActive: profile.credentialId === nextStatus.credentialId,
+      })),
+    }));
+    return nextStatus;
+  }
+
+  async function handleSaveExternalCredential(request: SaveExternalCredentialRequest) {
+    const nextStatus = await saveExternalCredential(request);
+    const nextProfiles = await fetchExternalCredentialProfiles().catch(() => ({
+      activeCredentialIds: nextStatus.provider && nextStatus.credentialId
+        ? { [nextStatus.provider]: nextStatus.credentialId }
+        : {},
+      credentials: nextStatus.configured ? [nextStatus] : [],
+    }));
+    setExternalCredentialProfiles(nextProfiles);
+    return nextStatus;
+  }
+
+  async function handleSelectExternalCredential(credentialId: string) {
+    const nextStatus = await selectExternalCredentialProfile(credentialId);
+    setExternalCredentialProfiles((current) => ({
+      activeCredentialIds: nextStatus.provider && nextStatus.credentialId
+        ? {
+            ...current.activeCredentialIds,
+            [nextStatus.provider]: nextStatus.credentialId,
+          }
+        : current.activeCredentialIds,
+      credentials: current.credentials.map((profile) => ({
+        ...profile,
+        isActive:
+          profile.provider === nextStatus.provider
+            ? profile.credentialId === nextStatus.credentialId
+            : profile.isActive,
+      })),
+    }));
+    return nextStatus;
+  }
+
+  async function handleDeleteExternalCredential(credentialId: string) {
+    const nextStatus = await deleteExternalCredentialProfile(credentialId);
+    const nextProfiles = await fetchExternalCredentialProfiles().catch(() => ({
+      activeCredentialIds: {},
+      credentials: [],
+    }));
+    setExternalCredentialProfiles(nextProfiles);
     return nextStatus;
   }
 
@@ -285,11 +402,14 @@ export function App() {
 
     return (
       <ChatShell
+        activeCredentialId={credentialProfiles.activeCredentialId}
         key={`${chatSessionKey}:${activeConversation?.conversationId ?? "new"}`}
         conversationSnapshot={activeConversation}
         copy={copy.chat}
+        credentialProfiles={credentialProfiles.credentials}
         onAnalysisChange={setSnapshot}
         onConversationChange={setActiveConversation}
+        onCredentialChange={(credentialId) => void handleSelectCredential(credentialId)}
         onFetchMarketQuote={fetchMarketQuote}
         onSendMessage={handleSendConversationMessage}
         responseLanguage={uiPreferences.language}
@@ -389,10 +509,17 @@ export function App() {
         <SettingsModal
           copy={copy.settingsModal}
           credentialStatus={credentialStatus}
+          activeCredentialId={credentialProfiles.activeCredentialId}
+          credentialProfiles={credentialProfiles.credentials}
+          externalCredentialProfiles={externalCredentialProfiles.credentials}
           onClearConversations={handleClearConversations}
           onClose={() => setIsSettingsOpen(false)}
           onDeleteCredential={handleDeleteCredential}
+          onDeleteExternalCredential={handleDeleteExternalCredential}
           onSaveCredential={handleSaveCredential}
+          onSaveExternalCredential={handleSaveExternalCredential}
+          onSelectCredential={handleSelectCredential}
+          onSelectExternalCredential={handleSelectExternalCredential}
           onTestCredential={testLlmCredential}
           onUiPreferencesChange={updateUiPreferences}
           uiPreferences={uiPreferences}

@@ -19,7 +19,6 @@ SPLIT_STATE_KEYS = ("kv_cache", "news_processing_runs", "prediction_artifacts")
 
 DEFAULT_STATE: State = {
     "settings": {
-        "provider": "openai",
         "analysis_mode": "quick",
         "default_market": "KR",
         "default_horizon": None,
@@ -33,6 +32,9 @@ DEFAULT_STATE: State = {
     "news_processing_runs": {},
     "prediction_artifacts": {},
     "llm_credentials": {},
+    "active_llm_credential_id": None,
+    "external_credentials": {},
+    "active_external_credential_ids": {},
 }
 
 
@@ -103,6 +105,12 @@ class LocalStateStore:
         state["news_processing_runs"] = state.get("news_processing_runs", {})
         state["prediction_artifacts"] = state.get("prediction_artifacts", {})
         state["llm_credentials"] = state.get("llm_credentials", {})
+        state["active_llm_credential_id"] = state.get("active_llm_credential_id")
+        state["external_credentials"] = state.get("external_credentials", {})
+        state["active_external_credential_ids"] = state.get(
+            "active_external_credential_ids",
+            {},
+        )
         self._merge_split_domains(state)
         return state
 

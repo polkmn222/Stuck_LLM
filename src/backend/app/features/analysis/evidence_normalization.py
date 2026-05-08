@@ -1,10 +1,7 @@
 import json
 import re
-from datetime import datetime
 from hashlib import sha256
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
-
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.features.analysis.schemas import (
     EvidenceItem,
@@ -13,6 +10,8 @@ from app.features.analysis.schemas import (
     SourceDocumentDecision,
     SourceDocumentInput,
 )
+from app.shared.datetime_utils import parse_aware_datetime
+from app.shared.pydantic_compat import model_dump
 
 UNTRUSTED_SOURCE_OPEN = "<UNTRUSTED_SOURCE_DOCUMENT>"
 UNTRUSTED_SOURCE_CLOSE = "</UNTRUSTED_SOURCE_DOCUMENT>"
@@ -38,23 +37,6 @@ BEARISH_TERMS = (
     "selloff",
     "risk",
 )
-
-
-def model_dump(model: BaseModel) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return cast(Dict[str, Any], model.model_dump())
-    return cast(Dict[str, Any], model.dict())
-
-
-def parse_datetime(value: str) -> datetime:
-    normalized = value.replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError as error:
-        raise ValueError("Datetime must be a valid ISO 8601 value.") from error
-    if parsed.tzinfo is None:
-        raise ValueError("Datetime must include a timezone offset.")
-    return parsed
 
 
 def quote_excerpt(text: str, max_chars: int = 160) -> str:
@@ -107,11 +89,19 @@ def normalize_source_documents(
     documents: List[SourceDocumentInput],
     as_of_at: str,
 ) -> List[SourceDocumentDecision]:
-    cutoff = parse_datetime(as_of_at)
+    cutoff = parse_aware_datetime(
+        as_of_at,
+        error_message="Datetime must be a valid ISO 8601 value.",
+        timezone_error_message="Datetime must include a timezone offset.",
+    )
     decisions: List[SourceDocumentDecision] = []
 
     for index, document in enumerate(documents):
-        published_at = parse_datetime(document.published_at)
+        published_at = parse_aware_datetime(
+            document.published_at,
+            error_message="Datetime must be a valid ISO 8601 value.",
+            timezone_error_message="Datetime must include a timezone offset.",
+        )
         included = published_at <= cutoff
         decisions.append(
             SourceDocumentDecision(
@@ -265,11 +255,4 @@ def apply_live_prompt_budget(
 
         included_documents.append(document)
         budgeted.append(document)
-
     return budgeted
-
-
-def included_documents(
-    decisions: Iterable[SourceDocumentDecision],
-) -> List[SourceDocumentDecision]:
-    return [document for document in decisions if document.included_in_analysis]

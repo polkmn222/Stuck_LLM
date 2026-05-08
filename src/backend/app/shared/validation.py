@@ -1,11 +1,13 @@
-from datetime import datetime
+from app.shared.datetime_utils import parse_aware_datetime
 
 
 def require_timezone_datetime(value: str) -> str:
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parse_aware_datetime(
+            value,
+            error_message="datetime must be a valid ISO 8601 value",
+            timezone_error_message="datetime must include a timezone offset",
+        )
     except ValueError as error:
-        raise ValueError("datetime must be a valid ISO 8601 value") from error
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError("datetime must include a timezone offset")
+        raise ValueError(str(error)) from error
     return value

@@ -48,7 +48,7 @@ STUCK_LLM_CORS_ORIGINS=http://127.0.0.1:5174,http://localhost:5174 ./run-all.sh
 
 - Product behavior specs: `docs/product/README.md`
 - LLM agent contract: `docs/product/llm-agent-spec.md`
-- LLM agent phase roadmap: `docs/product/llm-agent-phase-roadmap.md`
+- LLM runtime execution: `docs/product/llm-runtime-execution.md`
 - Agent workflow docs: `docs/agent-workflows/`
 - Design system: `DESIGN.md`
 

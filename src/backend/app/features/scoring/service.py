@@ -1,7 +1,5 @@
-from typing import Any, Dict, List, Tuple, cast
+from typing import List, Tuple
 from uuid import uuid4
-
-from pydantic import BaseModel
 
 from app.features.scoring.schemas import (
     ProbabilityImpact,
@@ -10,13 +8,8 @@ from app.features.scoring.schemas import (
     ScoreResponse,
     ScoringEvidenceInput,
 )
+from app.shared.pydantic_compat import model_dump as _model_dump
 from app.shared.state_store import LocalStateStore, State
-
-
-def _model_dump(model: BaseModel) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return cast(Dict[str, Any], model.model_dump())
-    return cast(Dict[str, Any], model.dict())
 
 
 def _impact_for(item: ScoringEvidenceInput) -> ProbabilityImpact:
@@ -60,7 +53,10 @@ def _probabilities(items: List[ScoringEvidenceInput]) -> Tuple[float, float, flo
     return buy, hold, sell
 
 
-def _confidence(items: List[ScoringEvidenceInput], excluded_document_count: int) -> float:
+def _confidence(
+    items: List[ScoringEvidenceInput],
+    excluded_document_count: int,
+) -> float:
     total_weight = min(sum(item.weight for item in items), 2.0)
     evidence_count = min(len(items), 5)
     confidence = 0.35 + total_weight * 0.2 + evidence_count * 0.05
@@ -95,6 +91,15 @@ def _expected_return_range(
     low = round(midpoint - uncertainty_width / 2.0, 1)
     high = round(midpoint + uncertainty_width / 2.0, 1)
     return low, high
+
+
+def _downside_probability(
+    sell_probability: float,
+    hold_probability: float,
+    confidence_score: float,
+) -> float:
+    uncertainty_adjustment = hold_probability * max(0.0, 1.0 - confidence_score) * 0.5
+    return round(min(100.0, sell_probability + uncertainty_adjustment), 1)
 
 
 def _similar_event_stats(items: List[ScoringEvidenceInput]) -> Tuple[int, float, float]:
@@ -141,7 +146,7 @@ def score_evidence(store: LocalStateStore, command: ScoreCommand) -> ScoreRespon
             confidence_score=confidence_score,
             expected_return_min_pct=expected_return_min,
             expected_return_max_pct=expected_return_max,
-            downside_probability=sell,
+            downside_probability=_downside_probability(sell, hold, confidence_score),
             similar_event_sample_count=sample_count,
             similar_event_win_rate=win_rate,
             similar_event_median_return_pct=median_return,
@@ -154,8 +159,9 @@ def score_evidence(store: LocalStateStore, command: ScoreCommand) -> ScoreRespon
                 "Probabilities are normalized from evidence stance weights with a hold baseline; "
                 "confidence reflects evidence count, total eligible weight, and excluded-source penalty; "
                 "expected return range is a rough five-trading-day estimate from directional edge "
-                "and confidence, not a calibrated forecast; similar-event calibration is a local "
-                "baseline slot for future historical matching."
+                "and confidence, not a calibrated forecast; downside probability adjusts sell "
+                "probability for uncertainty in neutral evidence; similar-event calibration is a "
+                "local baseline slot for future historical matching."
             ),
         )
 

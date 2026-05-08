@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines how the Stuck LLM user-facing agent should behave. It is a product contract, not an implementation log. Use it before changing conversational behavior, stock-analysis behavior, source handling, response formats, or the analysis workspace UI.
+This document defines how the Stuck LLM user-facing agent should behave. It is a product contract, not an implementation log. Use it before changing conversational behavior, stock-analysis behavior, source handling, response formats, or the analysis workspace UI. Use `llm-runtime-execution.md` for the detailed execution sequence behind news, prediction, charts, graph data, caches, and artifacts.
 
 ## Core Product Contract
 
@@ -27,6 +27,8 @@ This document defines how the Stuck LLM user-facing agent should behave. It is a
 
 ## Runtime Flow
 
+For the detailed runtime sequence, read `llm-runtime-execution.md`.
+
 1. Receive the user message and conversation metadata.
 2. Detect language, intent, mentioned symbols, markets, and whether the message is a follow-up.
 3. Resolve symbols through the market-data universe boundary before making analysis claims.
@@ -34,7 +36,7 @@ This document defines how the Stuck LLM user-facing agent should behave. It is a
 5. Retrieve market data, news, source documents, cached provider payloads, or prediction artifacts as required by the intent.
 6. Apply `as_of_at` filtering before evidence reaches prompts, scoring, cache reuse, or prediction artifacts.
 7. Build prompts from eligible evidence, product rules, provider capability, and response schema.
-8. Call the selected provider when credentials and capability are available; otherwise use the deterministic fallback path and clearly label the limitation.
+8. Call the selected provider when credentials and capability are available; otherwise return an explicit setup-needed or provider-error state. Stock prediction must not be synthesized through a local fallback.
 9. Persist messages, provider metadata, source lineage, prompt and cache version identifiers, and response artifacts without storing raw secrets.
 10. Render the response with evidence, source dates, provider state, stale-data state, and follow-up affordances.
 
@@ -45,26 +47,36 @@ This document defines how the Stuck LLM user-facing agent should behave. It is a
 - US mega-cap queries should include company-specific topics when known, such as Apple services and devices, Nvidia AI data center demand, Tesla deliveries and margins, and Google Search, Cloud, AI, and antitrust themes.
 - Provider selection should prefer configured public news/search providers and may expand to optional providers when credentials exist or when the user asks for local Korean news or public social reaction.
 - Search/news provider credentials must come from the external-provider credential boundary, not from LLM credential storage.
+- When no paid external news/search key is selected, the digest may use free RSS providers: Seeking Alpha RSS, Yahoo Finance RSS, Google News RSS, and Bing News RSS.
+- EventRegistry is a premium news provider and must run only through an explicitly selected EventRegistry external credential or a local-development compatibility credential. It must not reuse LLM credentials.
+- Reddit public search is a social/community provider, separate from article/news providers. It may query public subreddit search endpoints when the user asks for Reddit, community, investor sentiment, or similar social reaction.
 - Provider failures, missing credentials, empty results, cache hits, and cache misses must be recorded in provider runs or processing records.
 - News URLs should be canonicalized before dedupe, including removal of tracking query parameters.
+- User-supplied public article URLs may be crawled when they pass crawler safety checks. Failed, blocked, unsupported, or unsafe crawl attempts must be recorded as provider warnings.
+- User-supplied Reddit search URLs may be converted into public Reddit search results when available, then handled as untrusted source metadata.
 - Ranking should reward official, earnings, core business, controversy, and market-reaction categories over generic quote pages or stock-price pages.
 - Ranking should consider article importance, provider priority, publication time, original rank, source domain, and category diversity.
 - Important articles should avoid over-concentration in one category or one source domain when enough alternatives exist.
 - Digest summaries may use an LLM for Korean or English copy, but provider output must only update allowed fields such as summary, localized headline, localized article summary, and supported category.
 - News digest output is not automatically prediction evidence unless it is converted into source documents and passes the selected `as_of_at` cutoff.
+- Crawl-derived articles are not automatically trusted; they become prediction evidence only after conversion into source documents and the selected `as_of_at` cutoff.
+- User-facing news digest replies should be ChatGPT-style but source-grounded: include `as_of_at`, actual headline links, source domain, provider name, publication date when known, and section grouping such as product or services, earnings or guidance, regulation or litigation, community or market reaction, official announcements, business or strategy, and other.
 
 ## Prediction Logic
 
 - Prediction starts only after the agent has a resolved quote, horizon, analysis mode, `as_of_at`, and eligible source documents.
+- Prediction may convert important news digest articles, including crawl-derived articles, into source documents before evidence normalization.
 - If the user asks for prediction without a horizon, the product may default to the configured default horizon and should make that horizon visible in the response.
 - The prediction prompt must receive only eligible source documents and derived market snapshot context that are at or before `as_of_at`.
 - Provider prompts must present source document content as untrusted evidence and must restrict citations to allowed source document IDs.
 - Live provider output should return a summary and evidence items, not final buy, hold, sell probabilities directly.
 - Evidence items should carry source document ID, stance, weight, summary, and excerpt.
 - Probability scoring should run after evidence extraction and should normalize buy, hold, and sell probabilities to 100 percent.
-- Confidence should reflect eligible evidence weight, evidence count, excluded-source penalty, provider/fallback state, and whether the answer is using deterministic fallback.
-- Expected return range and similar-event baseline are explanatory local estimates unless a later calibrated model replaces them.
-- The user-facing answer must label thin evidence, missing credentials, provider failures, stale data, and deterministic fallback clearly.
+- Confidence should reflect eligible evidence weight, evidence count, and excluded-source penalty after valid provider evidence extraction.
+- Expected return range, downside probability, and similar-event baseline are explanatory local estimates unless a later calibrated model replaces them.
+- Downside probability should be separate from raw sell probability and may adjust adverse-risk estimates for low-confidence or neutral evidence.
+- The user-facing answer must label thin evidence, missing credentials, provider failures, and stale data clearly.
+- Scenario-style prediction copy may present base, bull, and bear cases, but it must remain an information-based scenario analysis backed by eligible evidence and must not present itself as personalized investment advice.
 
 ## Analysis Decision Boundaries
 
@@ -91,8 +103,10 @@ This document defines how the Stuck LLM user-facing agent should behave. It is a
 - Stock-analysis responses include buy, hold, sell probabilities plus confidence.
 - Probabilities must be internally consistent and should not imply certainty when evidence is thin.
 - Responses must identify major supporting and adverse evidence with source dates.
-- Responses must label stale, incomplete, fallback, or provider-limited results.
+- Responses must label stale, incomplete, provider-error, or provider-limited results.
 - The agent should answer in the user's language when feasible, while keeping provider names, tickers, and source titles accurate.
+- News digest responses should preserve exact headline links and provider/source labels instead of summarizing away the evidence trail.
+- Stock prediction responses should keep buy, hold, sell probabilities visible when available and may add information-based scenario ranges for readability.
 - Korean and English routing should be tested when behavior depends on language.
 - The agent should avoid legal, tax, or personalized financial advice framing unless a future product decision explicitly supports it.
 
@@ -102,6 +116,8 @@ This document defines how the Stuck LLM user-facing agent should behave. It is a
 - Keep the workspace calm, dense, and scannable.
 - Use a left navigation rail, central conversation, and focused side or panel views for analysis details, market snapshots, sources, and backtests when available.
 - Show source dates, provider state, and stale-data state near analysis output.
+- Show source/provider badges for news cards and selected credential badges near chat/model controls when a key is selected.
+- Render assistant markdown links as clickable source links without exposing hidden prompts or raw provider payloads.
 - Keep price data visually separate from LLM evidence and later PnL or backtest data.
 - Charts need stable responsive dimensions so loading, hover, empty, and error states do not resize the layout.
 - Align visual changes with `DESIGN.md`; do not introduce decorative gradients, oversized hero sections, nested cards, or marketing copy inside the app.
@@ -110,6 +126,10 @@ This document defines how the Stuck LLM user-facing agent should behave. It is a
 ## Provider And Credential Rules
 
 - Provider choice belongs in settings and per-message metadata.
+- Users may save multiple encrypted LLM provider credentials and select the active key in Settings or a per-message key in the chat workspace.
+- Per-message provider selection must apply consistently to chat intent extraction, generic chat completion, news digest LLM summarization, and live stock analysis.
+- Users may save multiple encrypted external news/search provider credentials in Settings. News/search providers must resolve the selected saved external credential first.
+- Local environment external credentials are a local-development compatibility fallback only and must never override a user-selected external credential.
 - LLM credentials must not be reused for search, news, or market-data providers.
 - Raw API keys, decrypted credentials, hidden prompts, and user secrets must not appear in responses, logs, caches, local state, or test snapshots.
 - A credential setup is incomplete until `/conversations` can produce repeated user-visible replies with prior messages preserved.

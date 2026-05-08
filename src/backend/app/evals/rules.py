@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from datetime import date
 from typing import Dict, Iterable, Optional, Set
 
@@ -9,6 +8,7 @@ from app.evals.source_quality import classify_source_quality
 from app.evals.types import EvalFinding
 from app.features.analysis.schemas import AnalysisResponse, SourceDocumentDecision
 from app.features.scoring.schemas import ScoreResponse
+from app.shared.datetime_utils import parse_aware_datetime
 
 PROBABILITY_TOLERANCE = 0.1
 HIGH_CONFIDENCE_WITHOUT_EVIDENCE_THRESHOLD = 0.7
@@ -49,11 +49,12 @@ TRUSTED_OFFICIAL_SOURCE_NAMES = {
 }
 
 
-def _parse_datetime(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        raise ValueError("Datetime must include a timezone offset.")
-    return parsed
+def _parse_datetime(value: str):
+    return parse_aware_datetime(
+        value,
+        error_message="Datetime must be a valid ISO 8601 value.",
+        timezone_error_message="Datetime must include a timezone offset.",
+    )
 
 
 def _finding(rule_id: str, message: str, source_id: Optional[str] = None) -> EvalFinding:

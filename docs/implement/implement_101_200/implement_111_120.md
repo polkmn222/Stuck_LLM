@@ -86,3 +86,26 @@ Important Notes
 
 Next Steps
 - Use `phase_119` for the next implementation slice.
+
+## phase_119 - News Official Domain Boundary
+
+Completed Work
+- Added `test_phase119_news_official_domain_boundary.py`.
+- Added `_is_official_domain` in `news_digest/service.py` and used it for category assignment and importance boost.
+- The helper accepts exact official hosts and dot-delimited official subdomains, preventing `fakeapple.com` from being treated as `apple.com`.
+
+Validation
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase119_news_official_domain_boundary.py -q` failed because `fakeapple.com` was categorized as official.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase119_news_official_domain_boundary.py src/backend/tests/test_phase110_118_llm_agent_contract.py src/backend/tests/test_phase064_069_news_digest.py -q` passed with 18 tests.
+
+## phase_120 - Analysis Cleanup And Shared Helpers
+
+Completed Work
+- Added `app/shared/pydantic_compat.py` for Pydantic v1/v2 `model_dump` compatibility.
+- Added `app/shared/datetime_utils.py` for timezone-aware datetime parsing.
+- Removed the obsolete phase 111 normalization helper block from `analysis/service.py`.
+- Rewired repeated local helper implementations in analysis, backtest, cache, ingestion, scoring, conversations, evals, and validation code.
+
+Validation
+- RED: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase120_shared_helpers_and_analysis_cleanup.py -q` failed because shared helpers did not exist.
+- GREEN: `PYTHONPATH=src/backend python3 -m pytest src/backend/tests/test_phase120_shared_helpers_and_analysis_cleanup.py src/backend/tests/test_phase110_118_llm_agent_contract.py src/backend/tests/test_phase007_analysis_pipeline.py src/backend/tests/test_phase020_security_and_concurrency.py src/backend/tests/test_phase023_source_audit_trail.py src/backend/tests/test_phase009_backtest.py -q` passed with 24 tests and one existing urllib3 LibreSSL warning.

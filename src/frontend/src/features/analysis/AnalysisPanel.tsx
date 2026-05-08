@@ -119,6 +119,18 @@ function formatSignedPercent(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
+function confidenceFactorText(factor: string, copy: UiCopy["analysis"]): string {
+  return copy.confidenceFactorLabels[
+    factor as keyof typeof copy.confidenceFactorLabels
+  ] ?? factor;
+}
+
+function providerErrorText(code: string, copy: UiCopy["analysis"]): string {
+  return copy.providerErrorLabels[
+    code as keyof typeof copy.providerErrorLabels
+  ] ?? code;
+}
+
 function ProbabilitySummary({
   analysis,
   copy,
@@ -164,7 +176,11 @@ function ProbabilitySummary({
         {`${formatSignedPercent(score.similarEventMedianReturnPct)} median`}
       </p>
       {score.confidenceFactors?.length ? (
-        <p>{`${copy.confidenceFactors}: ${score.confidenceFactors.join(", ")}`}</p>
+        <p>
+          {`${copy.confidenceFactors}: ${score.confidenceFactors
+            .map((factor) => confidenceFactorText(factor, copy))
+            .join(", ")}`}
+        </p>
       ) : null}
     </div>
   );
@@ -182,10 +198,12 @@ function OperationalState({
   }
 
   return (
-    <div className="analysis-operational-state" aria-label="Analysis provider state">
+    <div className="analysis-operational-state" aria-label={copy.operationalStateAria}>
       {analysis.provider ? <span>{`${copy.provider}: ${analysis.provider}`}</span> : null}
       {analysis.model ? <span>{`${copy.model}: ${analysis.model}`}</span> : null}
-      {analysis.providerErrorCode ? <span>{analysis.providerErrorCode}</span> : null}
+      {analysis.providerErrorCode ? (
+        <span>{providerErrorText(analysis.providerErrorCode, copy)}</span>
+      ) : null}
     </div>
   );
 }

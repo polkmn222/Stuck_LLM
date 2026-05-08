@@ -61,6 +61,9 @@ cd src/frontend && npm audit --audit-level=high
   `symbol x intent x language` combinations when routing or market resolution changes.
 - News/query-template changes must test provider fakes, cache hit/miss behavior,
   source transparency, and representative S&P 500 sectors without live network calls.
+- Tests that depend on fixed `as_of_at` or seeded market data must monkeypatch
+  market-data adapters to deterministic sources; live `FinanceDataReader` calls
+  are forbidden in those tests.
 - Prediction/cache changes must test `as_of_at` cutoffs, evidence-hash reuse,
   prompt/model version cache misses, and absence of raw credentials or system
   prompt text in stored artifacts.

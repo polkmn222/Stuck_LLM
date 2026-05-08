@@ -9,6 +9,7 @@ from app.features.processing_cache.schemas import (
     CacheInvalidationResponse,
     ProcessingCacheStatus,
 )
+from app.shared.datetime_utils import parse_optional_aware_datetime
 from app.shared.state_store import LocalStateStore, State
 
 PROCESSING_CACHE_VERSION = "phase_093_v1"
@@ -25,15 +26,7 @@ def _iso_now() -> str:
 
 
 def _parse_datetime(value: Any) -> Optional[datetime]:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed
+    return parse_optional_aware_datetime(value)
 
 
 def _canonical_json(value: Any) -> str:
